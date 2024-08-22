@@ -20,6 +20,7 @@
 
 #define SAMP_TIME 2500 // number of ms between sensor readings
 #define BLOCK_SIZE 4 // number of raw samples to average together for each reported data point
+#define DISPLAY_DATA_COUNT 7 // number of most recent points to be displayed during data collection
 #define BLINK_TIME 30 // time in ms between LED blinks on successful write to SD
 #define GPS_TIME 10000 // time between GPS reads
 #define GPS_TIMEOUT 5000 // number of ms before GPS read times out
@@ -43,7 +44,12 @@
 Adafruit_PM25AQI dustSensor = Adafruit_PM25AQI();
 PM25_AQI_Data pmDataRaw; // raw read from sensor
 PM25_AQI_Data pmDataAvg; // block average
-uint16_t recentData[3] = {0}; // 3 most recent averaged 0.3um particle counts
+
+typedef struct dataStruct {
+  unsigned long timestamp;
+  uint16_t particleCount;
+} displayData;
+displayData recentData[DISPLAY_DATA_COUNT];
 uint8_t blockCount = 0;
 bool dataDisplayFlag = false;
 
@@ -147,6 +153,8 @@ void setup() {
   #ifdef DEBUG_PRINT
   Serial.println("Initializing...");
   #endif
+
+  memset(recentData, 0, DISPLAY_DATA_COUNT*sizeof(displayData));
 
   // Set relevant pin modes
   pinMode(LED_BUILTIN, OUTPUT);
@@ -499,6 +507,7 @@ void loop() {
       case 5: // data collection screen
         page = 1; // go back to time entry choice menu
         prevState = state;
+        memset(recentData, 0, DISPLAY_DATA_COUNT*sizeof(displayData)); // reset recent data
         state = 0;
         break;
     }
@@ -547,8 +556,9 @@ void updateSampleSD()
   if(firstMeasurementFlag)
   {
     firstMeasurementFlag = false;
-    msTimer = 0;
-    dataStartMillis = millis();
+    msTimer = SAMP_TIME; // assumed it's been SAMP_TIME ms before first sample was taken
+    dataStartMillis = millis() - SAMP_TIME;
+    dataDisplayFlag = true;
   }
   else
   {
@@ -816,7 +826,18 @@ void updateSampleSD()
     pmDataAvg.particles_50um /= BLOCK_SIZE;
     pmDataAvg.particles_100um /= BLOCK_SIZE;
 
-    recentData[0] = pmDataAvg.particles_03um;
+    // update array of recent data points (this is a bit hacky)
+
+    // first shift everything left
+    for (int i = 0; i < DISPLAY_DATA_COUNT - 1; i++)
+    {
+      recentData[i].particleCount = recentData[i+1].particleCount;
+      recentData[i].timestamp = recentData[i+1].timestamp;
+    }
+
+    // add most recent data to end
+    recentData[DISPLAY_DATA_COUNT - 1].particleCount = pmDataAvg.particles_03um;
+    recentData[DISPLAY_DATA_COUNT - 1].timestamp = msTimer;
 
     // Display data to serial monitor and OLED display
     // Store data on SD card
@@ -1614,26 +1635,29 @@ void displayPage(uint8_t page)
 {
   // On all pages add "select" and "back" indicators on the bottom of the screen
   // On data collection page, only show "back"
-  display.clearDisplay();
-  display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, SSD1327_WHITE);
-  display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, SSD1327_WHITE);
-  // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, SSD1327_WHITE);
-  display.setTextColor(SSD1327_WHITE);
-  display.setCursor(10, display.height()-8);
-  display.print("Back ");
-  if(page == 2 || page == 3) // only the date and time page uses the left knob for left-right
+  if (page != 5 || dataDisplayFlag == true) // make sure screen doesn't get cleared even when there's no new data
   {
-    display.cp437(true);
-    display.print("\x11\x10");
-    display.cp437(false);
-  }
-  if (page != 5) // no select button on data collection screen
-  {
-    display.setCursor((display.width()/2) + 5, display.height()-8);
-    display.cp437(true);
-    display.print("\x1e\x1f");
-    display.cp437(false);
-    display.print(" Select");
+    display.clearDisplay();
+    display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, SSD1327_WHITE);
+    display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, SSD1327_WHITE);
+    // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, SSD1327_WHITE);
+    display.setTextColor(SSD1327_WHITE);
+    display.setCursor(10, display.height()-8);
+    display.print("Back ");
+    if(page == 2 || page == 3) // only the date and time page uses the left knob for left-right
+    {
+      display.cp437(true);
+      display.print("\x11\x10");
+      display.cp437(false);
+    }
+    if (page != 5) // no select button on data collection screen
+    {
+      display.setCursor((display.width()/2) + 5, display.height()-8);
+      display.cp437(true);
+      display.print("\x1e\x1f");
+      display.cp437(false);
+      display.print(" Select");
+    }
   }
 
   switch(page)
@@ -1786,20 +1810,10 @@ void displayPage(uint8_t page)
     }
     case(5): // Data collection
     {
-      if (dataDisplayFlag = true)
+      // TODO: display at every interval, but only update data when appropriate
+      if (dataDisplayFlag == true)
       {
-        // PM1p0_std = pmData.pm10_standard;
-        // PM2p5_std = pmData.pm25_standard;
-        // PM10p0_std = pmData.pm100_standard;
-        // PM1p0_atm = pmData.pm10_env;
-        // PM2p5_atm = pmData.pm25_env;
-        // PM10p0_atm = pmData.pm100_env;
-        uint16_t count_0p3um = recentData[0];
-        // count_0p5um = pmData.particles_05um;
-        // count_1p0um = pmData.particles_10um;
-        // count_2p5um = pmData.particles_25um;
-        // count_5p0um = pmData.particles_50um;
-        // count_10p0um = pmData.particles_100um;
+        dataDisplayFlag = false;
 
         char timeText[50];
         // char pm1p0Text[10];
@@ -1821,13 +1835,49 @@ void displayPage(uint8_t page)
         itoa(utcDay, dayText, 10);
         itoa(utcYear, yearText, 10);
 
-        display.setTextSize(2);
-        display.setCursor(0, 20);
-        display.print(">0.3um:");
-        display.setCursor(0, 48);
-        display.print(count_0p3um);
-        display.setCursor(0, 62);
-        display.print("count/0.1L");
+        display.drawLine(0, 20, display.width()-1, 20, SSD1327_WHITE);
+        updateDisplay("Time       Count/0.1L", 0, false);
+        updateDisplay("(seconds)  (>0.3um)", 10, false);
+        display.drawLine(display.width()/2 - 1, 0, display.width()/2 - 1, display.height()-21, SSD1327_WHITE);
+        display.drawLine(0, display.height() - 21, display.width() - 1, display.height() - 21, SSD1327_WHITE);
+
+        // draw lines for data points
+        for (int line = 0; line < DISPLAY_DATA_COUNT - 1; line++)
+        {
+          display.drawLine(0, line*10 + 30, display.width()-1, line*10 + 30, SSD1327_WHITE);
+        }
+
+        display.setTextSize(1);
+        
+        for (int line = 0; line < DISPLAY_DATA_COUNT; line++)
+        {
+          // if (recentData[line].timestamp == 0) // skip initial lines
+          // {
+          //   continue;
+          // }
+          display.setCursor(0, line*10 + 22);
+
+          if (line == DISPLAY_DATA_COUNT - 1) // make most recent larger
+          {
+            display.setTextSize(2);
+            display.setCursor(0, line*10 + 26);
+          }
+
+          display.print(recentData[line].timestamp / 1000);
+          display.setCursor(display.width()/2 + 2, line*10 + 22);
+
+          if (line == DISPLAY_DATA_COUNT - 1)
+            display.setCursor(display.width()/2 + 2, line*10 + 26);
+
+          display.print(recentData[line].particleCount);
+        }
+
+        // display.setCursor(0, 20);
+        // display.print(">0.3um:");
+        // display.setCursor(0, 48);
+        // display.print(count_0p3um);
+        // display.setCursor(0, 62);
+        // display.print("count/0.1L");
         display.setTextSize(1);
 
         // strcpy(displayText, "PM1.0:  ");
@@ -1864,7 +1914,7 @@ void displayPage(uint8_t page)
         strcat(timeText, minuteText);
         if(gpsDisplayFail || manualTimeEntry) strcat(timeText, " (RTC)");
         else strcat(timeText, " (GPS)");
-        updateDisplay(timeText, 108, false);
+        updateDisplay(timeText, 109, false);
       }
       break;
     }
