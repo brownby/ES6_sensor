@@ -1851,10 +1851,10 @@ void displayPage(uint8_t page)
         
         for (int line = 0; line < DISPLAY_DATA_COUNT; line++)
         {
-          // if (recentData[line].timestamp == 0) // skip initial lines
-          // {
-          //   continue;
-          // }
+          if (recentData[line].timestamp == 0) // skip initial lines
+          {
+            continue;
+          }
           display.setCursor(0, line*10 + 22);
 
           if (line == DISPLAY_DATA_COUNT - 1) // make most recent larger
