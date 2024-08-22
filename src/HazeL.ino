@@ -19,6 +19,7 @@
 #include "Adafruit_PM25AQI.h"
 
 #define SAMP_TIME 2500 // number of ms between sensor readings
+#define BLOCK_SIZE 4 // number of raw samples to average together for each reported data point
 #define BLINK_TIME 30 // time in ms between LED blinks on successful write to SD
 #define GPS_TIME 10000 // time between GPS reads
 #define GPS_TIMEOUT 5000 // number of ms before GPS read times out
@@ -40,7 +41,12 @@
 // #define DEBUG_PRINT
 
 Adafruit_PM25AQI dustSensor = Adafruit_PM25AQI();
-PM25_AQI_Data pmData;
+PM25_AQI_Data pmDataRaw; // raw read from sensor
+PM25_AQI_Data pmDataAvg; // block average
+uint16_t recentData[3] = {0}; // 3 most recent averaged 0.3um particle counts
+uint8_t blockCount = 0;
+bool dataDisplayFlag = false;
+
 BMP280 TPSensor;
 
 SdFat SD;
@@ -440,7 +446,9 @@ void loop() {
     if(curMillis - prevSampMillis >= SAMP_TIME)
     {
       prevSampMillis = curMillis;
-      if(curMillis - prevGpsMillis >= GPS_TIME)
+      blockCount++;
+      // if(curMillis - prevGpsMillis >= GPS_TIME)
+      if (blockCount == BLOCK_SIZE)
       {
         timestampFlag = true;
         prevGpsMillis = curMillis;
@@ -772,127 +780,162 @@ void updateSampleSD()
   }
   
   // Read dust sensor
-  while(!dustSensor.read(&pmData))
+  while(!dustSensor.read(&pmDataRaw))
   {
     #ifdef DEBUG_PRINT
     Serial.println("Sensor reading didn't work, trying again");
     #endif
   }
 
-  uint16_t PM1p0_std = pmData.pm10_standard;
-  uint16_t PM2p5_std = pmData.pm25_standard;
-  uint16_t PM10p0_std = pmData.pm100_standard;
-  uint16_t PM1p0_atm = pmData.pm10_env;
-  uint16_t PM2p5_atm = pmData.pm25_env;
-  uint16_t PM10p0_atm = pmData.pm100_env;
-  uint16_t count_0p3um = pmData.particles_03um;
-  uint16_t count_0p5um = pmData.particles_05um;
-  uint16_t count_1p0um = pmData.particles_10um;
-  uint16_t count_2p5um = pmData.particles_25um;
-  uint16_t count_5p0um = pmData.particles_50um;
-  uint16_t count_10p0um = pmData.particles_100um;
+  pmDataAvg.pm10_standard += pmDataRaw.pm10_standard;
+  pmDataAvg.pm25_standard += pmDataRaw.pm25_standard;
+  pmDataAvg.pm100_standard += pmDataRaw.pm100_standard;
+  pmDataAvg.pm10_env += pmDataRaw.pm10_env;
+  pmDataAvg.pm25_env += pmDataRaw.pm25_env;
+  pmDataAvg.pm100_env += pmDataRaw.pm100_env;
+  pmDataAvg.particles_03um += pmDataRaw.particles_03um;
+  pmDataAvg.particles_05um += pmDataRaw.particles_05um;
+  pmDataAvg.particles_10um += pmDataRaw.particles_10um;
+  pmDataAvg.particles_25um += pmDataRaw.particles_25um;
+  pmDataAvg.particles_50um += pmDataRaw.particles_50um;
+  pmDataAvg.particles_100um += pmDataRaw.particles_100um;
 
-  // Display data to serial monitor and OLED display
-  // Store data on SD card
-  dataFile = SD.open(dataFileName, FILE_WRITE);
-  if(dataFile)
+  if (blockCount == BLOCK_SIZE) // average and report data
   {
 
-    // Get timestamp from RTC
-    utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
-    utcMonth = rtc.getMonth();
-    utcDay = rtc.getDay();
-    utcHour = rtc.getHours();
-    utcMinute = rtc.getMinutes();
-    utcSecond = rtc.getSeconds();
+    pmDataAvg.pm10_standard /= BLOCK_SIZE;
+    pmDataAvg.pm25_standard /= BLOCK_SIZE;
+    pmDataAvg.pm100_standard /= BLOCK_SIZE;
+    pmDataAvg.pm10_env /= BLOCK_SIZE;
+    pmDataAvg.pm25_env /= BLOCK_SIZE;
+    pmDataAvg.pm100_env /= BLOCK_SIZE;
+    pmDataAvg.particles_03um /= BLOCK_SIZE;
+    pmDataAvg.particles_05um /= BLOCK_SIZE;
+    pmDataAvg.particles_10um /= BLOCK_SIZE;
+    pmDataAvg.particles_25um /= BLOCK_SIZE;
+    pmDataAvg.particles_50um /= BLOCK_SIZE;
+    pmDataAvg.particles_100um /= BLOCK_SIZE;
 
-    // Display data in the serial monitor
-    
-    Serial.print(msTimer);
-    Serial.print(',');
-    Serial.print(utcYear);
-    Serial.print('-');
-    Serial.print(utcMonth);
-    Serial.print('-');
-    Serial.print(utcDay);
-    Serial.print('T');
-    if(utcHour < 10) Serial.print('0');
-    Serial.print(utcHour);
-    Serial.print(':') ;
-    if(utcMinute < 10) Serial.print('0');
-    Serial.print(utcMinute);
-    Serial.print(':');
-    if(utcSecond < 10) Serial.print('0');
-    Serial.print(utcSecond);
-    Serial.print("+00:00");
-    Serial.print(',');
-    Serial.print(PM1p0_atm);
-    Serial.print(',');
-    Serial.print(PM2p5_atm);
-    Serial.print(',');
-    Serial.print(PM10p0_atm);
-    Serial.print(',');
-    Serial.print(count_0p3um);
-    Serial.print(',');
-    Serial.print(count_0p5um);
-    Serial.print(',');
-    Serial.print(count_1p0um);
-    Serial.print(',');
-    Serial.print(count_2p5um);
-    Serial.print(',');
-    Serial.print(count_5p0um);
-    Serial.print(',');
-    Serial.println(count_10p0um);
+    recentData[0] = pmDataAvg.particles_03um;
 
-    dataFile.print(msTimer);
-    dataFile.print(',');
-    dataFile.print(utcYear);
-    dataFile.print('-');
-    dataFile.print(utcMonth);
-    dataFile.print('-');
-    dataFile.print(utcDay);
-    dataFile.print('T');
-    if(utcHour < 10) dataFile.print('0');
-    dataFile.print(utcHour);
-    dataFile.print(':') ;
-    if(utcMinute < 10) dataFile.print('0');
-    dataFile.print(utcMinute);
-    dataFile.print(':');
-    if(utcSecond < 10) dataFile.print('0');
-    dataFile.print(utcSecond);
-    dataFile.print("+00:00");
-    dataFile.print(",");
-    dataFile.print(PM1p0_atm); // PM1.0 (atmo)
-    dataFile.print(",");
-    dataFile.print(PM2p5_atm); // PM2.5 (atmo)
-    dataFile.print(",");
-    dataFile.print(PM10p0_atm); // PM10.0 (atmo)
-    dataFile.print(",");
-    dataFile.print(count_0p3um); // >0.3um 
-    dataFile.print(",");
-    dataFile.print(count_0p5um); // >0.5um
-    dataFile.print(",");
-    dataFile.print(count_1p0um); // >1.0um
-    dataFile.print(",");
-    dataFile.print(count_2p5um); // >2.5um
-    dataFile.print(",");
-    dataFile.print(count_5p0um); // >5.0um
-    dataFile.print(",");
-    dataFile.print(count_10p0um); // >10.0um
-    dataFile.print('\n');
-    dataFile.close();
+    // Display data to serial monitor and OLED display
+    // Store data on SD card
+    dataFile = SD.open(dataFileName, FILE_WRITE);
+    if(dataFile)
+    {
 
-    ledFlag = true;
-  }
-  else
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Couldn't open file");
-    #endif
-    display.clearDisplay();
-    updateDisplay("Couldn't open data file", 40, false);
-    display.display();
-    delay(500);
+      // Get timestamp from RTC
+      utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
+      utcMonth = rtc.getMonth();
+      utcDay = rtc.getDay();
+      utcHour = rtc.getHours();
+      utcMinute = rtc.getMinutes();
+      utcSecond = rtc.getSeconds();
+
+      // Display data in the serial monitor
+      
+      Serial.print(msTimer);
+      Serial.print(',');
+      Serial.print(utcYear);
+      Serial.print('-');
+      Serial.print(utcMonth);
+      Serial.print('-');
+      Serial.print(utcDay);
+      Serial.print('T');
+      if(utcHour < 10) Serial.print('0');
+      Serial.print(utcHour);
+      Serial.print(':') ;
+      if(utcMinute < 10) Serial.print('0');
+      Serial.print(utcMinute);
+      Serial.print(':');
+      if(utcSecond < 10) Serial.print('0');
+      Serial.print(utcSecond);
+      Serial.print("+00:00");
+      Serial.print(',');
+      Serial.print(pmDataAvg.pm10_env);
+      Serial.print(',');
+      Serial.print(pmDataAvg.pm25_env);
+      Serial.print(',');
+      Serial.print(pmDataAvg.pm100_env);
+      Serial.print(',');
+      Serial.print(pmDataAvg.particles_03um);
+      Serial.print(',');
+      Serial.print(pmDataAvg.particles_05um);
+      Serial.print(',');
+      Serial.print(pmDataAvg.particles_10um);
+      Serial.print(',');
+      Serial.print(pmDataAvg.particles_25um);
+      Serial.print(',');
+      Serial.print(pmDataAvg.particles_50um);
+      Serial.print(',');
+      Serial.println(pmDataAvg.particles_100um);
+
+      dataFile.print(msTimer);
+      dataFile.print(',');
+      dataFile.print(utcYear);
+      dataFile.print('-');
+      dataFile.print(utcMonth);
+      dataFile.print('-');
+      dataFile.print(utcDay);
+      dataFile.print('T');
+      if(utcHour < 10) dataFile.print('0');
+      dataFile.print(utcHour);
+      dataFile.print(':') ;
+      if(utcMinute < 10) dataFile.print('0');
+      dataFile.print(utcMinute);
+      dataFile.print(':');
+      if(utcSecond < 10) dataFile.print('0');
+      dataFile.print(utcSecond);
+      dataFile.print("+00:00");
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.pm10_env); // PM1.0 (atmo)
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.pm25_env); // PM2.5 (atmo)
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.pm100_env); // PM10.0 (atmo)
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.particles_03um); // >0.3um 
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.particles_05um); // >0.5um
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.particles_10um); // >1.0um
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.particles_25um); // >2.5um
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.particles_50um); // >5.0um
+      dataFile.print(",");
+      dataFile.print(pmDataAvg.particles_100um); // >10.0um
+      dataFile.print('\n');
+      dataFile.close();
+
+      // reset block count and average data
+      blockCount = 0; 
+      pmDataAvg.pm10_standard = 0;
+      pmDataAvg.pm25_standard = 0;
+      pmDataAvg.pm100_standard = 0;
+      pmDataAvg.pm10_env = 0;
+      pmDataAvg.pm25_env = 0;
+      pmDataAvg.pm100_env = 0;
+      pmDataAvg.particles_03um = 0;
+      pmDataAvg.particles_05um = 0;
+      pmDataAvg.particles_10um = 0;
+      pmDataAvg.particles_25um = 0;
+      pmDataAvg.particles_50um = 0;
+      pmDataAvg.particles_100um = 0;
+      dataDisplayFlag = true;
+
+      ledFlag = true;
+    }
+    else
+    {
+      #ifdef DEBUG_PRINT
+      Serial.println("Couldn't open file");
+      #endif
+      display.clearDisplay();
+      updateDisplay("Couldn't open data file", 40, false);
+      display.display();
+      delay(500);
+    }
   }
 
   if(timestampFlag)
@@ -1743,83 +1786,86 @@ void displayPage(uint8_t page)
     }
     case(5): // Data collection
     {
-      // uint16_t PM1p0_std = pmData.pm10_standard;
-      // uint16_t PM2p5_std = pmData.pm25_standard;
-      // uint16_t PM10p0_std = pmData.pm100_standard;
-      // uint16_t PM1p0_atm = pmData.pm10_env;
-      // uint16_t PM2p5_atm = pmData.pm25_env;
-      // uint16_t PM10p0_atm = pmData.pm100_env;
-      uint16_t count_0p3um = pmData.particles_03um;
-      // uint16_t count_0p5um = pmData.particles_05um;
-      // uint16_t count_1p0um = pmData.particles_10um;
-      // uint16_t count_2p5um = pmData.particles_25um;
-      // uint16_t count_5p0um = pmData.particles_50um;
-      // uint16_t count_10p0um = pmData.particles_100um;
-
-      char timeText[50];
-      // char pm1p0Text[10];
-      // char pm2p5Text[10];
-      // char pm10p0Text[10];
-      char hourText[10];
-      char minuteText[10];
-      char monthText[10];
-      char dayText[10];
-      char yearText[10];
-
-      // itoa(PM1p0_atm, pm1p0Text, 10);
-      // itoa(PM2p5_atm, pm2p5Text, 10);
-      // itoa(PM10p0_atm, pm10p0Text, 10);
-
-      itoa(utcHour, hourText, 10);
-      itoa(utcMinute, minuteText, 10);
-      itoa(utcMonth, monthText, 10);
-      itoa(utcDay, dayText, 10);
-      itoa(utcYear, yearText, 10);
-
-      display.setTextSize(2);
-      display.setCursor(0, 20);
-      display.print(">0.3um:");
-      display.setCursor(0, 48);
-      display.print(count_0p3um);
-      display.setCursor(0, 62);
-      display.print("count/0.1L");
-      display.setTextSize(1);
-
-      // strcpy(displayText, "PM1.0:  ");
-      // strcat(displayText, pm1p0Text);
-      // strcat(displayText, " ug/m3");
-      // updateDisplay(displayText, 24, false);
-
-      // strcpy(displayText, "PM2.5:  ");
-      // strcat(displayText, pm2p5Text);
-      // strcat(displayText, " ug/m3");
-      // updateDisplay(displayText, 32, false);
-
-      // strcpy(displayText, "PM10.0: ");
-      // strcat(displayText, pm10p0Text);
-      // strcat(displayText, " ug/m3");
-      // updateDisplay(displayText, 40, false);
-
-      strcpy(timeText, monthText);
-      strcat(timeText, "/");
-      strcat(timeText, dayText);
-      strcat(timeText, "/");
-      strcat(timeText, yearText);
-      strcat(timeText, " ");
-      if(utcHour < 10)
+      if (dataDisplayFlag = true)
       {
-        strcat(timeText, "0");
+        // PM1p0_std = pmData.pm10_standard;
+        // PM2p5_std = pmData.pm25_standard;
+        // PM10p0_std = pmData.pm100_standard;
+        // PM1p0_atm = pmData.pm10_env;
+        // PM2p5_atm = pmData.pm25_env;
+        // PM10p0_atm = pmData.pm100_env;
+        uint16_t count_0p3um = recentData[0];
+        // count_0p5um = pmData.particles_05um;
+        // count_1p0um = pmData.particles_10um;
+        // count_2p5um = pmData.particles_25um;
+        // count_5p0um = pmData.particles_50um;
+        // count_10p0um = pmData.particles_100um;
+
+        char timeText[50];
+        // char pm1p0Text[10];
+        // char pm2p5Text[10];
+        // char pm10p0Text[10];
+        char hourText[10];
+        char minuteText[10];
+        char monthText[10];
+        char dayText[10];
+        char yearText[10];
+
+        // itoa(PM1p0_atm, pm1p0Text, 10);
+        // itoa(PM2p5_atm, pm2p5Text, 10);
+        // itoa(PM10p0_atm, pm10p0Text, 10);
+
+        itoa(utcHour, hourText, 10);
+        itoa(utcMinute, minuteText, 10);
+        itoa(utcMonth, monthText, 10);
+        itoa(utcDay, dayText, 10);
+        itoa(utcYear, yearText, 10);
+
+        display.setTextSize(2);
+        display.setCursor(0, 20);
+        display.print(">0.3um:");
+        display.setCursor(0, 48);
+        display.print(count_0p3um);
+        display.setCursor(0, 62);
+        display.print("count/0.1L");
+        display.setTextSize(1);
+
+        // strcpy(displayText, "PM1.0:  ");
+        // strcat(displayText, pm1p0Text);
+        // strcat(displayText, " ug/m3");
+        // updateDisplay(displayText, 24, false);
+
+        // strcpy(displayText, "PM2.5:  ");
+        // strcat(displayText, pm2p5Text);
+        // strcat(displayText, " ug/m3");
+        // updateDisplay(displayText, 32, false);
+
+        // strcpy(displayText, "PM10.0: ");
+        // strcat(displayText, pm10p0Text);
+        // strcat(displayText, " ug/m3");
+        // updateDisplay(displayText, 40, false);
+
+        strcpy(timeText, monthText);
+        strcat(timeText, "/");
+        strcat(timeText, dayText);
+        strcat(timeText, "/");
+        strcat(timeText, yearText);
+        strcat(timeText, " ");
+        if(utcHour < 10)
+        {
+          strcat(timeText, "0");
+        }
+        strcat(timeText, hourText);
+        strcat(timeText, ":");
+        if(utcMinute < 10)
+        {
+          strcat(timeText, "0");
+        }
+        strcat(timeText, minuteText);
+        if(gpsDisplayFail || manualTimeEntry) strcat(timeText, " (RTC)");
+        else strcat(timeText, " (GPS)");
+        updateDisplay(timeText, 108, false);
       }
-      strcat(timeText, hourText);
-      strcat(timeText, ":");
-      if(utcMinute < 10)
-      {
-        strcat(timeText, "0");
-      }
-      strcat(timeText, minuteText);
-      if(gpsDisplayFail || manualTimeEntry) strcat(timeText, " (RTC)");
-      else strcat(timeText, " (GPS)");
-      updateDisplay(timeText, 108, false);
       break;
     }
   }
