@@ -18,7 +18,7 @@
 #include <LittleFS.h>
 #include <TinyGPS++.h>
 #include <TimeLib.h>
-//#include <RTCZero.h>
+##include <RTCZero.h>
 #include <ESP32Time.h>
 #include <Seeed_BMP280.h>
 
@@ -146,6 +146,7 @@ void setup() {
   // Initialize comms with OLED display
   DisplaySetup();
   setLCDBacklight(255);
+  //return;
 
   display.clearDisplay();
   updateDisplay("Initializing...", 40, false);
@@ -230,6 +231,8 @@ void setup() {
 }
 
 void loop() {
+  DisplayLoop();
+  //return;
   // check number of milliseconds since Arduino was turned on
   curMillis = millis();
 
