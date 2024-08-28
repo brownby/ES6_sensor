@@ -17,33 +17,33 @@ bool HM3301::begin(uint8_t i2c_addr)
 
 // returns false if there's a timeout of 10ms
 // or if the checksum is invalid
-bool HM3301::readRaw(uint8_t *raw_data, uint32_t data_len)
-{
-  uint32_t timeOutCnt = 0;
-  Wire.requestFrom(HM3301_I2C_ADDR_DEFAULT, data_len);
-  while(data_len != Wire.available())
-  {
-    timeOutCnt++;
-    if(timeOutCnt > 10) return false;
-    delay(1);
-  }
-  for(int i = 0; i < data_len; i++)
-  {
-    raw_data[i] = Wire.read();
-  }
+// bool HM3301::readRaw(uint8_t *raw_data, uint32_t data_len)
+// {
+//   uint32_t timeOutCnt = 0;
+//   Wire.requestFrom(HM3301_I2C_ADDR_DEFAULT, data_len);
+//   while(data_len != Wire.available())
+//   {
+//     timeOutCnt++;
+//     if(timeOutCnt > 10) return false;
+//     delay(1);
+//   }
+//   for(int i = 0; i < data_len; i++)
+//   {
+//     raw_data[i] = Wire.read();
+//   }
 
-  // verify checksum
-  byte sum = 0;
+//   // verify checksum
+//   byte sum = 0;
 
-  for(int i = 0; i< 28; i++)
-  {
-    sum += raw_data[i];
-  }
-  if(sum != raw_data[28])
-  {
-    return false;
-  }
-}
+//   for(int i = 0; i< 28; i++)
+//   {
+//     sum += raw_data[i];
+//   }
+//   if(sum != raw_data[28])
+//   {
+//     return false;
+//   }
+// }
 
 bool HM3301::read()
 {

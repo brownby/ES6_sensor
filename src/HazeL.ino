@@ -5,7 +5,7 @@
 
 #include <SPI.h>
 #include <Wire.h>
-#include "HM3301.h"
+//#include "HM3301.h"
 
 // Make sure you have these five libraries installed in Documents/Arduino/libraries
 #include <Adafruit_I2CDevice.h>
@@ -18,9 +18,11 @@
 #include <LittleFS.h>
 #include <TinyGPS++.h>
 #include <TimeLib.h>
-##include <RTCZero.h>
+//#include <RTCZero.h>
 #include <ESP32Time.h>
 #include <Seeed_BMP280.h>
+#include <PMserial.h>
+#include "pinconfig.h"
 
 #define SAMP_TIME 2500 // number of ms between sensor readings
 #define BLINK_TIME 30 // time in ms between LED blinks on successful write to SD
@@ -52,7 +54,7 @@
 // #define DEBUG_PRINT
 
 #define LED_BUILTIN -1
-HM3301 dustSensor;
+//HM3301 dustSensor;
 BMP280 TPSensor;
 #define SD LittleFS
 File dataFile;
@@ -133,6 +135,8 @@ int16_t currentHoriMenuSelection = 0;
 int16_t prevVertMenuSelection = 0;
 uint8_t scroll = 0; // count number of times SD page has been scrolled
 
+SerialPM pms(PMSx003, PM_SERIAL);  // PMSx003, UART
+
 void setup() {
   // initialize Serial port
   Serial.begin(115200);
@@ -141,12 +145,13 @@ void setup() {
   Serial1.begin(9600);
 
   // Initialize I2C bus
-  Wire.begin();
+  Wire.begin(32, 27); // SDA on GPIO32, SCL on GPIO27
 
   // Initialize comms with OLED display
   DisplaySetup();
   setLCDBacklight(255);
-  //return;
+  for (int i =0; i < 200; i++)
+    DisplayLoop();
 
   display.clearDisplay();
   updateDisplay("Initializing...", 40, false);
@@ -194,19 +199,25 @@ void setup() {
   }
   delay(2500);
 
-  // Initialize dust sensor
-  if(!dustSensor.begin())
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Failed to initialize dust sensor");
-    #endif
-    display.clearDisplay();
-    updateDisplay("Dust sensor init failed", 32, false);
-    updateDisplay("Reset device", 48, false);
-    display.display();
-    while(true);
-  }
+  pinMode(PM_SET_PIN, OUTPUT);
+  // pinMode(PM_RESET_PIN, OUTPUT);
+  digitalWrite(PM_SET_PIN, HIGH); 
+  // digitalWrite(PM_RESET_PIN, LOW);
+  PM_SERIAL.begin(9600);
+  pms.init();
 
+  // Initialize dust sensor
+ // if(!dustSensor.begin())
+ 
+  // {
+  //   #ifdef DEBUG_PRINT
+  //   Serial.println("Failed to initialize dust sensor");
+  //   #endif
+  //   display.clearDisplay();
+  //   updateDisplay("Dust sensor init failed", 32, false);
+  //   updateDisplay("Reset device", 48, false);
+  //   display.display();
+  // }
   TPSensor.init();
 
   // Put GPS to sleep to start
@@ -231,8 +242,7 @@ void setup() {
 }
 
 void loop() {
-  DisplayLoop();
-  //return;
+  
   // check number of milliseconds since Arduino was turned on
   curMillis = millis();
 
@@ -789,27 +799,44 @@ void updateSampleSD()
       delay(500);
     }
   }
-  
-  // Read dust sensor
-  while(!dustSensor.read())
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Sensor reading didn't work, trying again");
-    #endif
-  }
 
-  uint16_t PM1p0_std = dustSensor.data.PM1p0_std;
-  uint16_t PM2p5_std = dustSensor.data.PM2p5_std;
-  uint16_t PM10p0_std = dustSensor.data.PM10p0_std;
-  uint16_t PM1p0_atm = dustSensor.data.PM1p0_atm;
-  uint16_t PM2p5_atm = dustSensor.data.PM2p5_atm;
-  uint16_t PM10p0_atm = dustSensor.data.PM10p0_atm;
-  uint16_t count_0p3um = dustSensor.data.count_0p3um;
-  uint16_t count_0p5um = dustSensor.data.count_0p5um;
-  uint16_t count_1p0um = dustSensor.data.count_1p0um;
-  uint16_t count_2p5um = dustSensor.data.count_2p5um;
-  uint16_t count_5p0um = dustSensor.data.count_5p0um;
-  uint16_t count_10p0um = dustSensor.data.count_10p0um;
+  // read the PM sensor
+  pms.read();
+  
+  // we already have read the latest
+  // // Read dust sensor
+  // while(!dustSensor.read())
+  // {
+  //   #ifdef DEBUG_PRINT
+  //   Serial.println("Sensor reading didn't work, trying again");
+  //   #endif
+  // }
+
+  // uint16_t PM1p0_std = dustSensor.data.PM1p0_std;
+  // uint16_t PM2p5_std = dustSensor.data.PM2p5_std;
+  // uint16_t PM10p0_std = dustSensor.data.PM10p0_std;
+  // uint16_t PM1p0_atm = dustSensor.data.PM1p0_atm;
+  // uint16_t PM2p5_atm = dustSensor.data.PM2p5_atm;
+  // uint16_t PM10p0_atm = dustSensor.data.PM10p0_atm;
+  // uint16_t count_0p3um = dustSensor.data.count_0p3um;
+  // uint16_t count_0p5um = dustSensor.data.count_0p5um;
+  // uint16_t count_1p0um = dustSensor.data.count_1p0um;
+  // uint16_t count_2p5um = dustSensor.data.count_2p5um;
+  // uint16_t count_5p0um = dustSensor.data.count_5p0um;
+  // uint16_t count_10p0um = dustSensor.data.count_10p0um;
+  
+  uint16_t PM1p0_std = pms.pm01;
+  uint16_t PM2p5_std = pms.pm10;
+  uint16_t PM10p0_std = pms.pm25;
+  // uint16_t PM1p0_atm = dustSensor.data.PM1p0_atm;
+  // uint16_t PM2p5_atm = dustSensor.data.PM2p5_atm;
+  // uint16_t PM10p0_atm = dustSensor.data.PM10p0_atm;
+  // uint16_t count_0p3um = dustSensor.data.count_0p3um;
+  // uint16_t count_0p5um = dustSensor.data.count_0p5um;
+  // uint16_t count_1p0um = dustSensor.data.count_1p0um;
+  // uint16_t count_2p5um = dustSensor.data.count_2p5um;
+  // uint16_t count_5p0um = dustSensor.data.count_5p0um;
+  // uint16_t count_10p0um = dustSensor.data.count_10p0um;
 
   // Display data to serial monitor and OLED display
   // Store data on SD card
@@ -844,24 +871,25 @@ void updateSampleSD()
     if(utcSecond < 10) Serial.print('0');
     Serial.print(utcSecond);
     Serial.print("+00:00");
-    Serial.print(',');
-    Serial.print(PM1p0_atm);
-    Serial.print(',');
-    Serial.print(PM2p5_atm);
-    Serial.print(',');
-    Serial.print(PM10p0_atm);
-    Serial.print(',');
-    Serial.print(count_0p3um);
-    Serial.print(',');
-    Serial.print(count_0p5um);
-    Serial.print(',');
-    Serial.print(count_1p0um);
-    Serial.print(',');
-    Serial.print(count_2p5um);
-    Serial.print(',');
-    Serial.print(count_5p0um);
-    Serial.print(',');
-    Serial.println(count_10p0um);
+    // Serial.print(',');
+    // Serial.print(PM1p0_atm);
+    // Serial.print(',');
+    // Serial.print(PM2p5_atm);
+    // Serial.print(',');
+    // Serial.print(PM10p0_atm);
+    // Serial.print(',');
+    // Serial.print(count_0p3um);
+    // Serial.print(',');
+    // Serial.print(count_0p5um);
+    // Serial.print(',');
+    // Serial.print(count_1p0um);
+    // Serial.print(',');
+    // Serial.print(count_2p5um);
+    // Serial.print(',');
+    // Serial.print(count_5p0um);
+    // Serial.print(',');
+    // Serial.print(count_10p0um);
+    Serial.println();
 
     dataFile.print(msTimer);
     dataFile.print(',');
@@ -880,24 +908,24 @@ void updateSampleSD()
     if(utcSecond < 10) dataFile.print('0');
     dataFile.print(utcSecond);
     dataFile.print("+00:00");
-    dataFile.print(",");
-    dataFile.print(PM1p0_atm); // PM1.0 (atmo)
-    dataFile.print(",");
-    dataFile.print(PM2p5_atm); // PM2.5 (atmo)
-    dataFile.print(",");
-    dataFile.print(PM10p0_atm); // PM10.0 (atmo)
-    dataFile.print(",");
-    dataFile.print(count_0p3um); // >0.3um 
-    dataFile.print(",");
-    dataFile.print(count_0p5um); // >0.5um
-    dataFile.print(",");
-    dataFile.print(count_1p0um); // >1.0um
-    dataFile.print(",");
-    dataFile.print(count_2p5um); // >2.5um
-    dataFile.print(",");
-    dataFile.print(count_5p0um); // >5.0um
-    dataFile.print(",");
-    dataFile.print(count_10p0um); // >10.0um
+    // dataFile.print(",");
+    // dataFile.print(PM1p0_atm); // PM1.0 (atmo)
+    // dataFile.print(",");
+    // dataFile.print(PM2p5_atm); // PM2.5 (atmo)
+    // dataFile.print(",");
+    // dataFile.print(PM10p0_atm); // PM10.0 (atmo)
+    // dataFile.print(",");
+    // dataFile.print(count_0p3um); // >0.3um 
+    // dataFile.print(",");
+    // dataFile.print(count_0p5um); // >0.5um
+    // dataFile.print(",");
+    // dataFile.print(count_1p0um); // >1.0um
+    // dataFile.print(",");
+    // dataFile.print(count_2p5um); // >2.5um
+    // dataFile.print(",");
+    // dataFile.print(count_5p0um); // >5.0um
+    // dataFile.print(",");
+    // dataFile.print(count_10p0um); // >10.0um
     dataFile.print('\n');
     dataFile.close();
 
@@ -1769,7 +1797,7 @@ void displayPage(uint8_t page)
       // uint16_t PM1p0_atm = dustSensor.data.PM1p0_atm;
       // uint16_t PM2p5_atm = dustSensor.data.PM2p5_atm;
       // uint16_t PM10p0_atm = dustSensor.data.PM10p0_atm;
-      uint16_t count_0p3um = dustSensor.data.count_0p3um;
+      //uint16_t count_0p3um = dustSensor.data.count_0p3um;
       // uint16_t count_0p5um = dustSensor.data.count_0p5um;
       // uint16_t count_1p0um = dustSensor.data.count_1p0um;
       // uint16_t count_2p5um = dustSensor.data.count_2p5um;
@@ -1800,7 +1828,7 @@ void displayPage(uint8_t page)
       display.setCursor(0, 20);
       display.print(">0.3um:");
       display.setCursor(0, 48);
-      display.print(count_0p3um);
+      //display.print(count_0p3um);
       display.setCursor(0, 62);
       display.print("count/0.1L");
       display.setTextSize(1);

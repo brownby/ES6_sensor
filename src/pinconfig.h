@@ -41,4 +41,8 @@
 
         //Configuration
         #define RatioMQ135CleanAir      3.6    
+
+        #define PM_SET_PIN              22 
+        #define PM_RESET_PIN            12
+        #define PM_SERIAL               Serial2
 #endif
