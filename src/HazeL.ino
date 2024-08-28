@@ -44,12 +44,12 @@
 // #define ENC_LEFT_A 5
 // #define ENC_LEFT_B 7
 
-#define ENC_RIGHT_BUTTON -1
-#define ENC_RIGHT_A -1
-#define ENC_RIGHT_B -1
-#define ENC_LEFT_BUTTON -1
-#define ENC_LEFT_A -1
-#define ENC_LEFT_B -1
+#define ENC_RIGHT_BUTTON 35
+#define ENC_RIGHT_A 39
+#define ENC_RIGHT_B 34
+#define ENC_LEFT_BUTTON 14
+#define ENC_LEFT_A 13
+#define ENC_LEFT_B 12
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
 // #define DEBUG_PRINT
 
