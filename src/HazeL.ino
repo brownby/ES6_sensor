@@ -13,14 +13,17 @@
 //#include <Adafruit_SSD1327.h>
 #include "Display.h"
 #include <Adafruit_ST7735.h>
-#include <Encoder.h>
-// #include "SdFat.h"
-#include <LittleFS.h>
+// #include <Encoder.h>
+#include <RotaryEncoder.h>
+//#include "SdFat.h"
+//#include <LittleFS.h>
+#include <SD.h>
 #include <TinyGPS++.h>
 #include <TimeLib.h>
 //#include <RTCZero.h>
 #include <ESP32Time.h>
 #include <Seeed_BMP280.h>
+#include <Ticker.h>
 #include <PMserial.h>
 #include "pinconfig.h"
 
@@ -29,13 +32,14 @@
 #define GPS_TIME 10000 // time between GPS reads
 #define GPS_TIMEOUT 5000 // number of ms before GPS read times out
 #define GPS_FIRST_TIMEOUT 600000 // number of ms before first GPS read times out
-#define BLINK_CNT 3 // number of times to blink LED on successful write
-#define SD_CS_PIN 4 // CS pin of SD card, 4 on SD MKR proto shield
+//#define BLINK_CNT 3 // number of times to blink LED on successful write
+//#define SD_CS_PIN 4 // CS pin of SD card, 4 on SD MKR proto shield
 #define CUR_YEAR 2022 // for GPS first fix error checking
 #define OLED_RESET -1
 #define SCREEN_ADDRESS 0x3D
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 128
+
 // TBD
 //#define ENC_RIGHT_BUTTON A1
 // #define ENC_RIGHT_A 0
@@ -44,20 +48,32 @@
 // #define ENC_LEFT_A 5
 // #define ENC_LEFT_B 7
 
+// SD card with custom pins (Not default SPI pins)
+#define SD_CS_PIN 15    // Chip Select (CS) pin for SD card
+#define SD_MISO 2      // MISO pin for SD card
+#define SD_MOSI 33      // MOSI pin for SD card
+#define SD_SCK 25       // Clock (SCK) pin for SD card
+
+// Create an instance of the SPI class with custom pins
+SPIClass customSPI(VSPI);  // Using VSPI, but with custom GPIO pins
+
+//Left and Right Encoder Pins
 #define ENC_RIGHT_BUTTON 35
 #define ENC_RIGHT_A 39
-#define ENC_RIGHT_B 34
-#define ENC_LEFT_BUTTON 14
-#define ENC_LEFT_A 13
+#define ENC_RIGHT_B 36
+#define ENC_LEFT_BUTTON 13
+#define ENC_LEFT_A 34
 #define ENC_LEFT_B 12
+
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
-// #define DEBUG_PRINT
+#define DEBUG_PRINT
 
 #define LED_BUILTIN -1
 //HM3301 dustSensor;
+// SdFat SD;
 BMP280 TPSensor;
-#define SD LittleFS
-File dataFile;
+//#define SD LittleFS
+File dataFile;  
 File metaFile;
 char dataFileName[23]; // YYMMDD_HHMMSS_data.txt
 char metaFileName[23]; // YYMMDD_HHMMSS_meta.txt
@@ -94,8 +110,13 @@ ESP32Time rtc;
 
 //Adafruit_SSD1327 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-Encoder encRight(ENC_RIGHT_B, ENC_RIGHT_A);
-Encoder encLeft(ENC_LEFT_B, ENC_LEFT_A);
+// Encoder encRight(ENC_RIGHT_B, ENC_RIGHT_A);
+// Encoder encLeft(ENC_LEFT_B, ENC_LEFT_A);
+RotaryEncoder encRight(ENC_RIGHT_A, ENC_RIGHT_B, ENC_RIGHT_BUTTON);
+RotaryEncoder encLeft(ENC_LEFT_A, ENC_LEFT_B, ENC_LEFT_BUTTON);
+Ticker encoderRotary;
+Ticker encoderButton;
+
 long encRightOldPosition = 0;
 long encLeftOldPosition = 0;
 
@@ -137,16 +158,23 @@ uint8_t scroll = 0; // count number of times SD page has been scrolled
 
 SerialPM pms(PMSx003, PM_SERIAL);  // PMSx003, UART
 
+// ISR for encoder position updates
+void encoderISR()
+{
+  encRight.readAB(); // Update position for right encoder
+  encLeft.readAB(); // Update position for left encoder
+}
+
 void setup() {
   // initialize Serial port
   Serial.begin(115200);
 
   // intialize comms with GPS module
-  Serial1.begin(9600);
+  // Controller Rx -> 14, Tx -> 26
+  Serial1.begin(9600, SERIAL_8N1, 26, 14);
 
   // Initialize I2C bus
   Wire.begin(32, 27); // SDA on GPIO32, SCL on GPIO27
-
   // Initialize comms with OLED display
   DisplaySetup();
   setLCDBacklight(255);
@@ -163,7 +191,7 @@ void setup() {
 
   // Set relevant pin modes
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(SD_CS_PIN, OUTPUT);
+  //pinMode(SD_CS_PIN, OUTPUT);
   pinMode(ENC_RIGHT_BUTTON, INPUT_PULLUP);
   pinMode(ENC_LEFT_BUTTON, INPUT_PULLUP);
 
@@ -175,9 +203,12 @@ void setup() {
   display.display();
   delay(2500);
 
+    // Initialize custom SPI bus
+  customSPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS_PIN);
   // Initialize SD card communication
   //if(!SD.begin(SD_CS_PIN))
-  if(!SD.begin(true))
+  //if(!SD.begin(true))
+  if (!SD.begin(SD_CS_PIN, customSPI, 4000000))
   {
     #ifdef DEBUG_PRINT
     Serial.println("Card failed");
@@ -227,7 +258,20 @@ void setup() {
   }
 
   // Begin RTC
-  //rtc.begin();
+  //For RTC Library
+  //rtc.begin(); 
+  //FOr ESP32TIme Library
+  rtc.setTime(0, 0, 0, 1, 1, 2024);  // Set a default time (HH, MM, SS, DD, MM, YYYY)
+
+
+  encLeft.begin();
+  encRight.begin();
+  encoderRotary.attach_ms(10, encoderISR); // Call encoderISR() every 10 ms
+  //encRight.attach_ms(15, encRightButtonISR); // Call encoderButtonISR() every 15 ms
+  //encRight.begin();
+  //encoderRotary.attach_ms(10, encoderISR); // Call encoderISR() every 10 ms
+  //encLeft.attach_ms(15, encLeftButtonISR); // Call encoderButtonISR() every 15 ms
+
 
   // Attach ISR for flipping buttonFlag when button is pressed
   attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
@@ -368,11 +412,32 @@ void loop() {
           prevState = state;
           page = 4; // go to page for viewing SD card files
           scroll = 0; // start at the beginning of the file list
-          #ifdef DEBUG_PRINT
-          Serial.println("\nSD card contents from SD.ls():");
-          SD.ls(LS_R);
+          
+          // For SDFAt Library
+          // #ifdef DEBUG_PRINT
+          // Serial.println("\nSD card contents from SD.ls():");
+          // SD.ls(LS_R);
+          // Serial.println();
+          // #endif
+
+          // For SD Library 
+        #ifdef DEBUG_PRINT
+          Serial.println("\nSD card contents:");
+          File root = SD.open("/");  // Open the root directory
+
+          while (File entry = root.openNextFile()) {  // Iterate through files
+            Serial.print(entry.name());  // Print file name
+            if (entry.isDirectory()) {
+              Serial.println("/");  // Indicate directories
+            } else {
+              Serial.print("\t");
+              Serial.println(entry.size());  // Print file size
+            }
+            entry.close();  // Close each file after reading
+          }
           Serial.println();
-          #endif
+        #endif
+
 
           // Create file list, if not already created
           if (!fileListAlloc)
@@ -428,6 +493,16 @@ void loop() {
         //rtc.setDate(manualDay, manualMonth, manualYear % 100); // year is saved as an offset from 2000
         //rtc.setTime(manualHour, manualMinute, 0);
 
+        /////// FOr ESP32 Library
+        // Set the date and time using the rtc.setTime() method
+        rtc.setTime(manualHour, manualMinute, 0, manualDay, manualMonth, manualYear);
+        
+        // Get the current time as a time_t value
+        time_t now = rtc.getEpoch();
+
+        // Convert time_t to tm structure
+        tm* timeInfo = localtime(&now);
+        
         if(!rtcSet) rtcSet = true;
         
         manualTimeEntry = true; // flag to indicate that RTC is being used for time stamps, not GPS
@@ -460,7 +535,7 @@ void loop() {
       if(curMillis - prevLedMillis >= BLINK_TIME)
       {
         prevLedMillis = curMillis;
-        blinkLed();
+        //blinkLed();
       }
     }
 
@@ -647,6 +722,17 @@ void updateSampleSD()
             // rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
             // rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
 
+            // Resync RTC every successful GPS read
+            // Update RTC with GPS date and time
+            rtc.setTime(
+              gps.time.second(),    // seconds
+              gps.time.minute(),    // minutes
+              gps.time.hour(),      // hours
+              gps.date.day(),       // day
+              gps.date.month(),     // month
+              gps.date.year()       // year
+            );
+
             if(!rtcSet) rtcSet = true;
             break;
           }
@@ -705,15 +791,27 @@ void updateSampleSD()
     
     if(manualTimeEntry || timeoutFlag) // if manual time entry or GPS timed out, overwrite timestamp with RTC values
     {
+      //// For RTC Library
       // utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
       // utcMonth = rtc.getMonth();
       // utcDay = rtc.getDay();
       // utcHour = rtc.getHours();
       // utcMinute = rtc.getMinutes();
       // utcSecond = rtc.getSeconds();
+
+      // For TimeLib Library
+      utcYear = year();       // Returns the year (e.g., 2024)
+      utcMonth = month();     // Returns the month (1 = January, 12 = December)
+      utcDay = day();         // Returns the day of the month
+      utcHour = hour();       // Returns the current hour (0-23)
+      utcMinute = minute();   // Returns the current minute (0-59)
+      utcSecond = second();   // Returns the current second (0-59)
+
     }
 
-    metaFile = SD.open(metaFileName, FILE_WRITE);
+    metaFile = SD.open(startWithSlash(metaFileName), FILE_WRITE);
+    // metaFile = SD.open(metaFileName, FILE_WRITE);
+
     if(metaFile)
     {
       Serial.print("# ");
@@ -825,22 +923,21 @@ void updateSampleSD()
   // uint16_t count_5p0um = dustSensor.data.count_5p0um;
   // uint16_t count_10p0um = dustSensor.data.count_10p0um;
   
-  uint16_t PM1p0_std = pms.pm01;
-  uint16_t PM2p5_std = pms.pm10;
-  uint16_t PM10p0_std = pms.pm25;
-  // uint16_t PM1p0_atm = dustSensor.data.PM1p0_atm;
-  // uint16_t PM2p5_atm = dustSensor.data.PM2p5_atm;
-  // uint16_t PM10p0_atm = dustSensor.data.PM10p0_atm;
-  // uint16_t count_0p3um = dustSensor.data.count_0p3um;
-  // uint16_t count_0p5um = dustSensor.data.count_0p5um;
-  // uint16_t count_1p0um = dustSensor.data.count_1p0um;
-  // uint16_t count_2p5um = dustSensor.data.count_2p5um;
-  // uint16_t count_5p0um = dustSensor.data.count_5p0um;
-  // uint16_t count_10p0um = dustSensor.data.count_10p0um;
+ uint16_t PM1p0_atm = pms.pm01;      // PM1.0 concentration in μg/m³
+uint16_t PM2p5_atm = pms.pm25;      // PM2.5 concentration in μg/m³
+uint16_t PM10p0_atm = pms.pm10;     // PM10.0 concentration in μg/m³
+
+uint16_t count_0p3um = pms.n0p3;    // Number of particles with diameter > 0.3µm
+uint16_t count_0p5um = pms.n0p5;    // Number of particles with diameter > 0.5µm
+uint16_t count_1p0um = pms.n1p0;    // Number of particles with diameter > 1.0µm
+uint16_t count_2p5um = pms.n2p5;    // Number of particles with diameter > 2.5µm
+uint16_t count_5p0um = pms.n5p0;    // Number of particles with diameter > 5.0µm
+uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0µm
 
   // Display data to serial monitor and OLED display
   // Store data on SD card
-  dataFile = SD.open(dataFileName, FILE_WRITE);
+  dataFile = SD.open(startWithSlash(dataFileName), FILE_WRITE);
+  // dataFile = SD.open(dataFileName, FILE_WRITE);
   if(dataFile)
   {
 
@@ -889,6 +986,25 @@ void updateSampleSD()
     // Serial.print(count_5p0um);
     // Serial.print(',');
     // Serial.print(count_10p0um);
+    Serial.print(',');
+    Serial.print(pms.pm01);       // Print PM1.0 concentration
+    Serial.print(',');
+    Serial.print(pms.pm25);       // Print PM2.5 concentration
+    Serial.print(',');
+    Serial.print(pms.pm10);       // Print PM10.0 concentration
+    Serial.print(',');
+    Serial.print(pms.n0p3);       // Print count of particles > 0.3µm
+    Serial.print(',');
+    Serial.print(pms.n0p5);       // Print count of particles > 0.5µm
+    Serial.print(',');
+    Serial.print(pms.n1p0);       // Print count of particles > 1.0µm
+    Serial.print(',');
+    Serial.print(pms.n2p5);       // Print count of particles > 2.5µm
+    Serial.print(',');
+    Serial.print(pms.n5p0);       // Print count of particles > 5.0µm
+    Serial.print(',');
+    Serial.print(pms.n10p0);      // Print count of particles > 10.0µm
+
     Serial.println();
 
     dataFile.print(msTimer);
@@ -926,6 +1042,25 @@ void updateSampleSD()
     // dataFile.print(count_5p0um); // >5.0um
     // dataFile.print(",");
     // dataFile.print(count_10p0um); // >10.0um
+    dataFile.print(",");
+    dataFile.print(pms.pm01);    // PM1.0 (atmo)
+    dataFile.print(",");
+    dataFile.print(pms.pm25);    // PM2.5 (atmo)
+    dataFile.print(",");
+    dataFile.print(pms.pm10);    // PM10.0 (atmo)
+    dataFile.print(",");
+    dataFile.print(pms.n0p3);    // >0.3µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n0p5);    // >0.5µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n1p0);    // >1.0µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n2p5);    // >2.5µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n5p0);    // >5.0µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n10p0);   // >10.0µm particle count
+
     dataFile.print('\n');
     dataFile.close();
 
@@ -974,7 +1109,8 @@ void uploadSerial(char * fileName, uint32_t wait)
   // Not sending file name at top of file anymore, do this explicitly when it's sent via the upload menu to maintain backwards compatibility
   // Serial.print(fileNameExtension); Serial.print('\n');
 
-  File file = SD.open(fileNameExtension, FILE_READ);
+  File file = SD.open(startWithSlash(fileNameExtension), FILE_READ);
+  // File file = SD.open(fileNameExtension, FILE_READ);
   while(file.available())
   {
     if (file.available() > sizeof(buffer))
@@ -999,23 +1135,25 @@ void uploadSerial(char * fileName, uint32_t wait)
 }
 
 // blink LED
-void blinkLed()
-{
+// void blinkLed()
+// {
   
-  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+//   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   
-  if(++ledCount >= BLINK_CNT*2)
-  {
-    ledFlag = false;
-    ledCount = 0;
-  }
-}
+//   if(++ledCount >= BLINK_CNT*2)
+//   {
+//     ledFlag = false;
+//     ledCount = 0;
+//   }
+// }
 
 // read GPS module and encode data
 void readGps()
 {
   while(Serial1.available() > 0)
   {
+    int b = Serial1.peek();
+    Serial.printf("GPS Data: %d\r\n", b);
     if(gps.encode(Serial1.read()))
     {
       #ifdef DEBUG_PRINT
@@ -1079,6 +1217,11 @@ char createChecksum(char* cmd)
   return checksum;
 }
 
+String startWithSlash(char* chr){
+  if(chr[0] == '/')
+    return String(chr);
+  return String("/") + String(chr); 
+}
 // Create two data files, one for GPS and one for dust data
 void createDataFiles()
 {
@@ -1094,7 +1237,8 @@ void createDataFiles()
   int seconds;
 
   // strings to concatenate into file names
-  char yearStr[3];
+  char yearStr[5];
+  // char yearStr[3];
   char monthStr[3];
   char dayStr[3];
   char hourStr[3];
@@ -1270,12 +1414,14 @@ void createDataFiles()
   File newFile;
 
   // Create column headers for new data file
-  if(!SD.exists(dataFileName))
+  if(!SD.exists(startWithSlash(dataFileName)))
+  // if(!SD.exists(dataFileName))
   {
     #ifdef DEBUG_PRINT
     Serial.println("Writing column headers for new data file");
     #endif
-    newFile = SD.open(dataFileName, FILE_WRITE);
+    newFile = SD.open(startWithSlash(dataFileName), FILE_WRITE);
+    // newFile = SD.open(dataFileName, FILE_WRITE);
     if(newFile)
     {
       #ifdef DEBUG_PRINT
@@ -1292,13 +1438,16 @@ void createDataFiles()
     newFile.close();
   }
 
+
   // Create column headers for new data file
-  if(!SD.exists(metaFileName))
+  if(!SD.exists(startWithSlash(metaFileName)))
+  // if(!SD.exists(metaFileName))
   {
     #ifdef DEBUG_PRINT
     Serial.println("Writing column headers for new data file");
     #endif
-    newFile = SD.open(metaFileName, FILE_WRITE);
+    newFile = SD.open(startWithSlash(metaFileName), FILE_WRITE);
+    // newFile = SD.open(metaFileName, FILE_WRITE);
     if(newFile)
     {
       #ifdef DEBUG_PRINT
@@ -1325,8 +1474,10 @@ void createDataFiles()
 // Update current menu selection based on encoders
 void updateMenuSelection()
 {
-  long encRightPosition = encRight.read();
-  long encLeftPosition = encLeft.read();
+  long encRightPosition = encRight.getPosition();
+  long encLeftPosition = encLeft.getPosition();
+  //Serial.print("EncA"); Serial.print(encRightPosition);
+  //Serial.print(", EncB"); Serial.println(encLeftPosition);
   #ifdef DEBUG_PRINT
   // Serial.print("Right encoder position: ");
   // Serial.println(encRightPosition);
@@ -1798,6 +1949,7 @@ void displayPage(uint8_t page)
       // uint16_t PM2p5_atm = dustSensor.data.PM2p5_atm;
       // uint16_t PM10p0_atm = dustSensor.data.PM10p0_atm;
       //uint16_t count_0p3um = dustSensor.data.count_0p3um;
+      uint16_t count_0p3um = pms.n0p3; // Number of particles with diameter > 0.3µm
       // uint16_t count_0p5um = dustSensor.data.count_0p5um;
       // uint16_t count_1p0um = dustSensor.data.count_1p0um;
       // uint16_t count_2p5um = dustSensor.data.count_2p5um;
@@ -1907,10 +2059,12 @@ int cmpstr(void const *a, void const *b)
 
 void getFileList()
 {
+  Serial.println("getFileList");
   // Free fileList if it's malloc'd
   // (this should never be the case, but just to be sure)
   if (fileListAlloc)
   {
+    Serial.println("Deallocating files list");
     free(fileList);
     fileListAlloc = false;
   }
@@ -1919,16 +2073,18 @@ void getFileList()
   #ifdef DEBUG_PRINT
   Serial.println("\nCounting files on SD card");
   #endif
-  File root = LittleFS.open("/");
+  //File root = LittleFS.open("/");
+  File root = SD.open("/");
   File file;
   fileCount = 0;
   while (file = root.openNextFile())
   {
     if (file){
+      Serial.printf("File: %s\n", file.name());
       if(!file.isDirectory()){
         fileCount++;        
+        Serial.printf("File added: %d\n", fileCount);
         #ifdef DEBUG_PRINT
-        file.printName(&Serial);
         Serial.print('\t');
         Serial.println(fileCount);
         #endif
@@ -1952,7 +2108,8 @@ void getFileList()
   // now create an array of file names
   char filesOnSd[fileCount][30]; // Each file name should be at most 22 characters long
   uint32_t curFile = 0;
-  root = LittleFS.open("/");
+  //root = LittleFS.open("/");
+  root = SD.open("/");
   while(root.openNextFile())
   {
     if(!file)

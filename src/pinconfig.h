@@ -9,8 +9,8 @@
 
     //FAN 
         //PINS 
-        #define PIN_FAN_CONTROL         14
-        #define PIN_FAN_SENSE           15
+        //#define PIN_FAN_CONTROL         14
+        //#define PIN_FAN_SENSE           15
 
         //CONFIG
         #define FAN_FREQ                4900
@@ -20,7 +20,7 @@
     //LCD - PINS
         #define TFT_RST                 4                                            
         #define TFT_DC                  5
-        #define TFT_CS                  16
+        #define TFT_CS                  19  // First it was 16
         #define TFT_LED                 21
 
         //BRIGHTNESS
@@ -36,13 +36,13 @@
     //SENSORS
 
         //SENSORS
-        #define MQ_PIN                  32 // BreatheIO V6 - 35 PIN
-        #define DHT_PIN                 13
+        //#define MQ_PIN                  32 // BreatheIO V6 - 35 PIN
+        //#define DHT_PIN                 13
 
         //Configuration
         #define RatioMQ135CleanAir      3.6    
 
         #define PM_SET_PIN              22 
-        #define PM_RESET_PIN            12
+        //#define PM_RESET_PIN            12
         #define PM_SERIAL               Serial2
 #endif
