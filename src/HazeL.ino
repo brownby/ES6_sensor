@@ -14,7 +14,7 @@
 #include "SdFat.h"
 #include <TinyGPS++.h>
 #include <TimeLib.h>
-#include <RTCZero.h>
+#include "hardware/rtc.h"
 #include "Seeed_BMP280.h"
 #include "Adafruit_PM25AQI.h"
 
@@ -88,7 +88,7 @@ uint8_t manualHour = 0;
 uint8_t manualMinute = 0;
 bool manualTimeEntry = false; // false means use GPS
 bool rtcSet = false; // flag to indicate if RTC is set or not
-RTCZero rtc;
+datetime_t rtcTime;
 
 Adafruit_SSD1327 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
@@ -214,8 +214,8 @@ void setup() {
     toggleGps();
   }
 
-  // Begin RTC
-  rtc.begin();
+  // Init RTC
+  _rtc_init();
 
   // Attach ISR for flipping buttonFlag when button is pressed
   attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
@@ -381,11 +381,11 @@ void loop() {
           page = 2; // enter date
           if(rtcSet)
           {
-            manualDay = rtc.getDay();
-            manualHour = rtc.getHours();
-            manualMinute = rtc.getMinutes();
-            manualMonth = rtc.getMonth();
-            manualYear = rtc.getYear();
+            manualDay = rtcTime.day;
+            manualHour = rtcTime.hour;
+            manualMinute = rtcTime.min;
+            manualMonth = rtcTime.month;
+            manualYear = rtcTime.year;
           }
         }
       }
@@ -411,8 +411,16 @@ void loop() {
         #endif
 
         // set RTC
-        rtc.setDate(manualDay, manualMonth, manualYear % 100); // year is saved as an offset from 2000
-        rtc.setTime(manualHour, manualMinute, 0);
+        rtcTime.day = manualDay;
+        rtcTime.month = manualMonth;
+        rtcTime.year = manualYear;
+        rtcTime.hour = manualHour;
+        rtcTime.min = manualMinute;
+        rtcTime.sec = 0;
+        rtc_set_datetime(&rtcTime);
+
+        // rtc.setDate(manualDay, manualMonth, manualYear % 100); // year is saved as an offset from 2000
+        // rtc.setTime(manualHour, manualMinute, 0);
 
         if(!rtcSet) rtcSet = true;
         
@@ -633,8 +641,17 @@ void updateSampleSD()
             gpsDisplayFail = false;
 
             // resync RTC every successful GPS read
-            rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
-            rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
+
+            rtcTime.day = gps.date.day();
+            rtcTime.month = gps.date.month();
+            rtcTime.year = gps.date.year();
+            rtcTime.hour = gps.time.hour();
+            rtcTime.min = gps.time.minute();
+            rtcTime.sec = gps.time.second();
+            rtc_set_datetime(&rtcTime);
+
+            // rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
+            // rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
 
             if(!rtcSet) rtcSet = true;
             break;
@@ -694,12 +711,21 @@ void updateSampleSD()
     
     if(manualTimeEntry || timeoutFlag) // if manual time entry or GPS timed out, overwrite timestamp with RTC values
     {
-      utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
-      utcMonth = rtc.getMonth();
-      utcDay = rtc.getDay();
-      utcHour = rtc.getHours();
-      utcMinute = rtc.getMinutes();
-      utcSecond = rtc.getSeconds();
+      rtc_get_datetime(&rtcTime);
+      
+      utcYear = rtcTime.year;
+      utcMonth = rtcTime.month;
+      utcDay = rtcTime.day;
+      utcHour = rtcTime.hour;
+      utcMinute = rtcTime.min;
+      utcSecond = rtcTime.sec;
+      
+      // utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
+      // utcMonth = rtc.getMonth();
+      // utcDay = rtc.getDay();
+      // utcHour = rtc.getHours();
+      // utcMinute = rtc.getMinutes();
+      // utcSecond = rtc.getSeconds();
     }
 
     metaFile = SD.open(metaFileName, FILE_WRITE);
@@ -846,12 +872,21 @@ void updateSampleSD()
     {
 
       // Get timestamp from RTC
-      utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
-      utcMonth = rtc.getMonth();
-      utcDay = rtc.getDay();
-      utcHour = rtc.getHours();
-      utcMinute = rtc.getMinutes();
-      utcSecond = rtc.getSeconds();
+      rtc_get_datetime(&rtcTime);
+      
+      utcYear = rtcTime.year;
+      utcMonth = rtcTime.month;
+      utcDay = rtcTime.day;
+      utcHour = rtcTime.hour;
+      utcMinute = rtcTime.min;
+      utcSecond = rtcTime.sec;
+
+      // utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
+      // utcMonth = rtc.getMonth();
+      // utcDay = rtc.getDay();
+      // utcHour = rtc.getHours();
+      // utcMinute = rtc.getMinutes();
+      // utcSecond = rtc.getSeconds();
 
       // Display data in the serial monitor
       
@@ -1191,12 +1226,20 @@ void createDataFiles()
         // prevTimeStamp = now();
 
         // GPS data is valid, set RTC
-        rtc.setDay(gps.date.day());
-        rtc.setMonth(gps.date.month());
-        rtc.setYear(gps.date.year() % 100);
-        rtc.setHours(gps.time.hour());
-        rtc.setMinutes(gps.time.minute());
-        rtc.setSeconds(gps.time.second());
+        rtcTime.day = gps.date.day();
+        rtcTime.month = gps.date.month();
+        rtcTime.year = gps.date.year();
+        rtcTime.hour = gps.time.hour();
+        rtcTime.min = gps.time.minute();
+        rtcTime.sec = gps.time.second();
+        rtc_set_datetime(&rtcTime);
+
+        // rtc.setDay(gps.date.day());
+        // rtc.setMonth(gps.date.month());
+        // rtc.setYear(gps.date.year() % 100);
+        // rtc.setHours(gps.time.hour());
+        // rtc.setMinutes(gps.time.minute());
+        // rtc.setSeconds(gps.time.second());
 
         if(!rtcSet) rtcSet = true;
 
@@ -1230,12 +1273,21 @@ void createDataFiles()
   }
 
   // RTC clock should be set (whether manually or with GPS)
-  year = rtc.getYear();
-  month = rtc.getMonth();
-  day = rtc.getDay();
-  hour = rtc.getHours();
-  minutes = rtc.getMinutes();
-  seconds = rtc.getSeconds();
+  rtc_get_datetime(&rtcTime);
+      
+  year = rtcTime.year;
+  month = rtcTime.month;
+  day = rtcTime.day;
+  hour = rtcTime.hour;
+  minutes = rtcTime.min;
+  seconds = rtcTime.sec;
+
+  // year = rtc.getYear();
+  // month = rtc.getMonth();
+  // day = rtc.getDay();
+  // hour = rtc.getHours();
+  // minutes = rtc.getMinutes();
+  // seconds = rtc.getSeconds();
 
   itoa(year, yearStr, 10);
   itoa(month, monthStr, 10);
