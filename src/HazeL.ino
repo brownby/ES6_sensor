@@ -37,7 +37,7 @@
 #define ENC_LEFT_A 5
 #define ENC_LEFT_B 7
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
-// #define DEBUG_PRINT
+#define DEBUG_PRINT
 
 uint32_t sampTime = 2500; // number of ms between sensor readings
 uint32_t blockSize = 4;   // number of raw samples to average together for each reported data point
@@ -440,6 +440,8 @@ void loop() {
       else if(page == 4) currentVertMenuSelection = currentVertMenuSelection; // known minor bug here where upon first entering this page the cursor will be on the second selection
       else currentVertMenuSelection = 0;
       currentHoriMenuSelection = 0;
+      if (page == 6) currentHoriMenuSelection = (sampTime - 2500) / 500;
+
       encRightButtonFlag = false;
       encRightButtonISREn = true;
     }
@@ -1447,6 +1449,15 @@ void updateMenuSelection()
         case 6: // sample time selection
           if(currentVertMenuSelection < 0) currentVertMenuSelection = 0;
           else if (currentVertMenuSelection > 1) currentVertMenuSelection = 1;
+          
+          if (currentVertMenuSelection == 0)
+          {
+            currentHoriMenuSelection = (sampTime - 2500) / 500;
+          }
+          else if (currentVertMenuSelection == 1)
+          {
+            currentHoriMenuSelection = blockSize - 1;
+          }
       }
       #ifdef DEBUG_PRINT
       Serial.print("Current vert menu selection: ");
@@ -1539,8 +1550,18 @@ void updateMenuSelection()
             scroll--;
             if(scroll < 0) scroll = 0;
           }
+          break;
         case 6:
           if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top
+          if (currentVertMenuSelection == 0)
+          {
+            currentHoriMenuSelection = (sampTime - 2500) / 500;
+          }
+          else if (currentVertMenuSelection == 1)
+          {
+            currentHoriMenuSelection = blockSize - 1;
+          }
+          break;
       }
       #ifdef DEBUG_PRINT
       Serial.print("Current vert menu selection: ");
@@ -1560,9 +1581,9 @@ void updateMenuSelection()
     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
     {
       prevMenuMillis = curMillis;
+      currentHoriMenuSelection++;
       if(page == 2 || page == 3) // date or time entry
       {
-        currentHoriMenuSelection++;
         if(page == 2) // date entry
         {
           if(currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
@@ -1592,6 +1613,19 @@ void updateMenuSelection()
           {
             currentVertMenuSelection = manualMinute;
           }
+        }
+      }
+      else if(page == 6)
+      {
+        if (currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+        
+        if (currentVertMenuSelection == 0)
+        {
+          sampTime = 2500 + 500*currentHoriMenuSelection; // min 2500
+        }
+        else if (currentVertMenuSelection == 1)
+        {
+          blockSize = currentHoriMenuSelection + 1; // min 1
         }
       }
       #ifdef DEBUG_PRINT
@@ -1641,6 +1675,19 @@ void updateMenuSelection()
           currentVertMenuSelection = manualMinute;
         }
       }
+      else if(page == 6)
+      {
+        if (currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+        
+        if (currentVertMenuSelection == 0)
+        {
+          sampTime = 2500 + 500*currentHoriMenuSelection; // min 2500
+        }
+        else if (currentVertMenuSelection == 1)
+        {
+          blockSize = currentHoriMenuSelection + 1; // min 1
+        }
+      }
       #ifdef DEBUG_PRINT
       Serial.print("Current hori menu selection: ");
       Serial.println(currentHoriMenuSelection);
@@ -1663,19 +1710,26 @@ void displayPage(uint8_t page)
     display.setTextColor(SSD1327_WHITE);
     display.setCursor(10, display.height()-8);
     display.print("Back ");
-    if(page == 2 || page == 3) // only the date and time page uses the left knob for left-right
+    if(page == 2 || page == 3 || page == 6) // only the date and time page uses the left knob for left-right
     {
       display.cp437(true);
       display.print("\x11\x10");
       display.cp437(false);
     }
-    if (page != 5) // no select button on data collection screen
+    if (page != 5 && page != 6) // no select button on data collection screen
     {
       display.setCursor((display.width()/2) + 5, display.height()-8);
       display.cp437(true);
       display.print("\x1e\x1f");
       display.cp437(false);
       display.print(" Select");
+    }
+    if (page == 6) // arrows but no select on sample time screen
+    {
+      display.setCursor((display.width()/2) + 5, display.height()-8);
+      display.cp437(true);
+      display.print("\x1e\x1f");
+      display.cp437(false);
     }
   }
 
@@ -1953,22 +2007,24 @@ void displayPage(uint8_t page)
       itoa(sampTime, strSample, 10);
       itoa(blockSize, strBlock, 10);
 
-      char displaySample[100] = "Sample time (ms): ";
-      char displayBlock[100] = "Block size (# of samples): ";
+      updateDisplay("Sample time (ms):", 8, false);
+      updateDisplay("Block size", 48, false);
+      updateDisplay("(# of samples):", 56, false);
 
-      strcat(displaySample, strSample);
-      strcat(displayBlock, strBlock);
+      display.setTextSize(2);
 
-      if (currentVertMenuSelection == 0)
-      {
-        updateDisplay(displaySample, 8, true);
-        updateDisplay(displayBlock, 24, false);
-      }
-      else if (currentVertMenuSelection == 1)
-      {
-        updateDisplay(displaySample, 8, false);
-        updateDisplay(displayBlock, 24, true);
-      }
+      display.setCursor(0, 24);
+      if (currentVertMenuSelection == 0) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      display.print(strSample);
+
+      display.setTextColor(SSD1327_WHITE);
+
+      display.setCursor(0, 72);
+      if (currentVertMenuSelection == 1) display.setTextColor(SSD1327_BLACK, SSD1327_WHITE);
+      display.print(strBlock);
+
+      display.setTextColor(SSD1327_WHITE);
+      display.setTextSize(1);
       break;
     } 
   }
