@@ -3,6 +3,7 @@
  * Benjamin Y. Brown
  */
 
+#include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
 
@@ -39,7 +40,7 @@
 #define ENC_LEFT_A 5
 #define ENC_LEFT_B 7
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
-// #define DEBUG_PRINT
+#define DEBUG_PRINT
 
 Adafruit_PM25AQI dustSensor = Adafruit_PM25AQI();
 PM25_AQI_Data pmDataRaw; // raw read from sensor
@@ -56,8 +57,8 @@ bool dataDisplayFlag = false;
 BMP280 TPSensor;
 
 SdFat SD;
-File dataFile;
-File metaFile;
+FsFile dataFile;
+FsFile metaFile;
 char dataFileName[23]; // YYMMDD_HHMMSS_data.txt
 char metaFileName[23]; // YYMMDD_HHMMSS_meta.txt
 char * fileList; // list of files on SD card
@@ -137,6 +138,10 @@ void setup() {
   // initialize Serial port
   Serial.begin(115200);
 
+  #ifdef DEBUG_PRINT
+  while(!Serial);
+  #endif
+
   // intialize comms with GPS module
   Serial1.begin(9600);
 
@@ -215,7 +220,7 @@ void setup() {
   }
 
   // Init RTC
-  _rtc_init();
+  rtc_init();
 
   // Attach ISR for flipping buttonFlag when button is pressed
   attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
@@ -1026,7 +1031,7 @@ void uploadSerial(char * fileName, uint32_t wait)
   // Not sending file name at top of file anymore, do this explicitly when it's sent via the upload menu to maintain backwards compatibility
   // Serial.print(fileNameExtension); Serial.print('\n');
 
-  File file = SD.open(fileNameExtension, FILE_READ);
+  FsFile file = SD.open(fileNameExtension, FILE_READ);
   while(file.available())
   {
     if (file.available() > sizeof(buffer))
@@ -1335,7 +1340,7 @@ void createDataFiles()
   Serial.println(metaFileName);
   #endif
   
-  File newFile;
+  FsFile newFile;
 
   // Create column headers for new data file
   if(!SD.exists(dataFileName))
@@ -2019,8 +2024,8 @@ void getFileList()
   #ifdef DEBUG_PRINT
   Serial.println("\nCounting files on SD card");
   #endif
-  File file;
-  File root;
+  FsFile file;
+  FsFile root;
   fileCount = 0;
   if(!root.open("/"))
   {
