@@ -18,8 +18,6 @@
 #include "Seeed_BMP280.h"
 #include "Adafruit_PM25AQI.h"
 
-#define SAMP_TIME 2500 // number of ms between sensor readings
-#define BLOCK_SIZE 4 // number of raw samples to average together for each reported data point
 #define DISPLAY_DATA_COUNT 7 // number of most recent points to be displayed during data collection
 #define BLINK_TIME 30 // time in ms between LED blinks on successful write to SD
 #define GPS_TIME 10000 // time between GPS reads
@@ -40,6 +38,9 @@
 #define ENC_LEFT_B 7
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
 // #define DEBUG_PRINT
+
+uint32_t sampTime = 2500; // number of ms between sensor readings
+uint32_t blockSize = 4;   // number of raw samples to average together for each reported data point
 
 Adafruit_PM25AQI dustSensor = Adafruit_PM25AQI();
 PM25_AQI_Data pmDataRaw; // raw read from sensor
@@ -126,6 +127,7 @@ uint8_t prevState = 0;
 // page = 3 entering time
 // page = 4 viewing SD card files
 // page = 5 data collection screen
+// page = 6 sample time selection
 uint8_t page = 0;
 uint8_t prevPage = 0;
 int16_t currentVertMenuSelection = 0;
@@ -367,6 +369,10 @@ void loop() {
             getFileList();
           }
         }
+        else if(currentVertMenuSelection == 2) // sample time selection
+        {
+          page = 6;
+        }
       }
       else if (page == 1) // time entry method
       {
@@ -451,12 +457,12 @@ void loop() {
     }
 
     // Read sensor and update SD card every SAMP_TIME milliseconds
-    if(curMillis - prevSampMillis >= SAMP_TIME)
+    if(curMillis - prevSampMillis >= sampTime)
     {
       prevSampMillis = curMillis;
       blockCount++;
       // if(curMillis - prevGpsMillis >= GPS_TIME)
-      if (blockCount == BLOCK_SIZE)
+      if (blockCount == blockSize)
       {
         timestampFlag = true;
         prevGpsMillis = curMillis;
@@ -510,6 +516,11 @@ void loop() {
         memset(recentData, 0, DISPLAY_DATA_COUNT*sizeof(displayData)); // reset recent data
         state = 0;
         break;
+      case 6: // sample time select screen
+        page = 0;
+        prevState = state;
+        state = 0;
+        break;
     }
     // reset menus for next page
     if(page == 2) currentVertMenuSelection = manualMonth - 1;
@@ -556,8 +567,8 @@ void updateSampleSD()
   if(firstMeasurementFlag)
   {
     firstMeasurementFlag = false;
-    msTimer = SAMP_TIME; // assumed it's been SAMP_TIME ms before first sample was taken
-    dataStartMillis = millis() - SAMP_TIME;
+    msTimer = sampTime; // assumed it's been SAMP_TIME ms before first sample was taken
+    dataStartMillis = millis() - sampTime;
     dataDisplayFlag = true;
   }
   else
@@ -810,21 +821,21 @@ void updateSampleSD()
   pmDataAvg.particles_50um += pmDataRaw.particles_50um;
   pmDataAvg.particles_100um += pmDataRaw.particles_100um;
 
-  if (blockCount == BLOCK_SIZE) // average and report data
+  if (blockCount == blockSize) // average and report data
   {
 
-    pmDataAvg.pm10_standard /= BLOCK_SIZE;
-    pmDataAvg.pm25_standard /= BLOCK_SIZE;
-    pmDataAvg.pm100_standard /= BLOCK_SIZE;
-    pmDataAvg.pm10_env /= BLOCK_SIZE;
-    pmDataAvg.pm25_env /= BLOCK_SIZE;
-    pmDataAvg.pm100_env /= BLOCK_SIZE;
-    pmDataAvg.particles_03um /= BLOCK_SIZE;
-    pmDataAvg.particles_05um /= BLOCK_SIZE;
-    pmDataAvg.particles_10um /= BLOCK_SIZE;
-    pmDataAvg.particles_25um /= BLOCK_SIZE;
-    pmDataAvg.particles_50um /= BLOCK_SIZE;
-    pmDataAvg.particles_100um /= BLOCK_SIZE;
+    pmDataAvg.pm10_standard /= blockSize;
+    pmDataAvg.pm25_standard /= blockSize;
+    pmDataAvg.pm100_standard /= blockSize;
+    pmDataAvg.pm10_env /= blockSize;
+    pmDataAvg.pm25_env /= blockSize;
+    pmDataAvg.pm100_env /= blockSize;
+    pmDataAvg.particles_03um /= blockSize;
+    pmDataAvg.particles_05um /= blockSize;
+    pmDataAvg.particles_10um /= blockSize;
+    pmDataAvg.particles_25um /= blockSize;
+    pmDataAvg.particles_50um /= blockSize;
+    pmDataAvg.particles_100um /= blockSize;
 
     // update array of recent data points (this is a bit hacky)
 
@@ -1361,7 +1372,10 @@ void updateMenuSelection()
       currentVertMenuSelection++;
       switch (page)
       {
-        case 0: case 1: // initial two menus
+        case 0: // main menu
+          if(currentVertMenuSelection > 2) currentVertMenuSelection = 2; // three choices
+          break;
+        case 1: // time selection menu
           if(currentVertMenuSelection > 1) currentVertMenuSelection = 1; // only two choices on these pages
           break;
         case 2: // entering date
@@ -1430,6 +1444,9 @@ void updateMenuSelection()
             scroll++;
           }
           break;
+        case 6: // sample time selection
+          if(currentVertMenuSelection < 0) currentVertMenuSelection = 0;
+          else if (currentVertMenuSelection > 1) currentVertMenuSelection = 1;
       }
       #ifdef DEBUG_PRINT
       Serial.print("Current vert menu selection: ");
@@ -1522,6 +1539,8 @@ void updateMenuSelection()
             scroll--;
             if(scroll < 0) scroll = 0;
           }
+        case 6:
+          if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top
       }
       #ifdef DEBUG_PRINT
       Serial.print("Current vert menu selection: ");
@@ -1668,11 +1687,19 @@ void displayPage(uint8_t page)
       {
         updateDisplay("Start data collection\n", 0, true);
         updateDisplay("Upload data", 8, false);
+        updateDisplay("Sample time select", 16, false);
       }
       else if (currentVertMenuSelection == 1)
       {
         updateDisplay("Start data collection\n", 0, false);
         updateDisplay("Upload data", 8, true);
+        updateDisplay("Sample time select", 16, false);
+      }
+      else if (currentVertMenuSelection == 2)
+      {
+        updateDisplay("Start data collection\n", 0, false);
+        updateDisplay("Upload data", 8, false);
+        updateDisplay("Sample time select", 16, true);
       }
       break;
     }
@@ -1918,6 +1945,32 @@ void displayPage(uint8_t page)
       }
       break;
     }
+    case(6):
+    {
+      char strSample[20];
+      char strBlock[10];
+
+      itoa(sampTime, strSample, 10);
+      itoa(blockSize, strBlock, 10);
+
+      char displaySample[100] = "Sample time (ms): ";
+      char displayBlock[100] = "Block size (# of samples): ";
+
+      strcat(displaySample, strSample);
+      strcat(displayBlock, strBlock);
+
+      if (currentVertMenuSelection == 0)
+      {
+        updateDisplay(displaySample, 8, true);
+        updateDisplay(displayBlock, 24, false);
+      }
+      else if (currentVertMenuSelection == 1)
+      {
+        updateDisplay(displaySample, 8, false);
+        updateDisplay(displayBlock, 24, true);
+      }
+      break;
+    } 
   }
   display.display();
 }
