@@ -37,7 +37,7 @@
 #define ENC_LEFT_A 5
 #define ENC_LEFT_B 7
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
-#define DEBUG_PRINT
+// #define DEBUG_PRINT
 
 uint32_t sampTime = 2500; // number of ms between sensor readings
 uint32_t blockSize = 4;   // number of raw samples to average together for each reported data point
@@ -463,6 +463,10 @@ void loop() {
     {
       prevSampMillis = curMillis;
       blockCount++;
+      #ifdef DEBUG_PRINT
+      Serial.print("Block count: ");
+      Serial.println(blockCount);
+      #endif
       // if(curMillis - prevGpsMillis >= GPS_TIME)
       if (blockCount == blockSize)
       {
@@ -1230,6 +1234,7 @@ void createDataFiles()
         state = 0;
         encLeftButtonFlag = false;
         encLeftButtonISREn = true;
+        blockCount = 0;
         return;
       }
     }
@@ -1349,6 +1354,7 @@ void createDataFiles()
   state = 2;
   page = 5;
   firstMeasurementFlag = true;
+  blockCount = 0;
 }
 
 // Update current menu selection based on encoders
