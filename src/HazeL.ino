@@ -548,6 +548,7 @@ void loop() {
         timestampFlag = true;
         prevGpsMillis = curMillis;
       }
+      // createDataFiles();
       updateSampleSD();
     }
   }
@@ -631,7 +632,8 @@ void encLeftButtonISR()
   }
 }
 
-// update samples in SD card
+// // update samples in SD card
+
 void updateSampleSD()
 {
   bool timeoutFlag = false;
@@ -809,7 +811,7 @@ void updateSampleSD()
 
     }
 
-    metaFile = SD.open(startWithSlash(metaFileName), FILE_WRITE);
+    metaFile = SD.open(startWithSlash(metaFileName), FILE_APPEND);
     // metaFile = SD.open(metaFileName, FILE_WRITE);
 
     if(metaFile)
@@ -833,6 +835,7 @@ void updateSampleSD()
       Serial.print(utcSecond);
       Serial.print("+00:00");
 
+      Serial.print("Writing to meta file...");
       metaFile.print(msTimer);
       metaFile.print(',');
       metaFile.print(utcYear);
@@ -884,7 +887,9 @@ void updateSampleSD()
       metaFile.print(',');
       metaFile.print(press, 2);
       metaFile.print('\n');
+      metaFile.flush();  // Ensure data is written to the file
       metaFile.close();
+      Serial.println("done.");
     }
     else
     {
@@ -936,7 +941,7 @@ uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0Â
 
   // Display data to serial monitor and OLED display
   // Store data on SD card
-  dataFile = SD.open(startWithSlash(dataFileName), FILE_WRITE);
+  dataFile = SD.open(startWithSlash(dataFileName), FILE_APPEND);
   // dataFile = SD.open(dataFileName, FILE_WRITE);
   if(dataFile)
   {
@@ -1006,7 +1011,7 @@ uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0Â
     Serial.print(pms.n10p0);      // Print count of particles > 10.0Âµm
 
     Serial.println();
-
+    Serial.print("Writing to data file...");
     dataFile.print(msTimer);
     dataFile.print(',');
     dataFile.print(utcYear);
@@ -1062,7 +1067,9 @@ uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0Â
     dataFile.print(pms.n10p0);   // >10.0Âµm particle count
 
     dataFile.print('\n');
+    dataFile.flush();  // Ensure data is written to the file
     dataFile.close();
+    Serial.println("done.");
 
     ledFlag = true;
   }
@@ -1225,9 +1232,12 @@ String startWithSlash(char* chr){
 // Create two data files, one for GPS and one for dust data
 void createDataFiles()
 {
+  Serial.println("createDataFiles()");
+  bool newFileCreated = false;
   // reset current file names
   memset(dataFileName, 0, sizeof(dataFileName));
   memset(metaFileName, 0, sizeof(metaFileName));
+  
 
   int year;
   int month;
@@ -1326,6 +1336,10 @@ void createDataFiles()
         // rtc.setMinutes(gps.time.minute());
         // rtc.setSeconds(gps.time.second());
 
+        // GPS data is valid, set RTC using ESP32Time methods
+        rtc.setTime(gps.time.second(), gps.time.minute(), gps.time.hour(), 
+                gps.date.day(), gps.date.month(), gps.date.year());
+
         if(!rtcSet) rtcSet = true;
 
         break;
@@ -1357,6 +1371,47 @@ void createDataFiles()
     toggleGps();
   }
 
+  
+//   // Reset the file creation flag at the beginning of every power cycle
+// if(!newFileCreated) {
+//     // RTC clock should be set (whether manually or with GPS)
+//     year = rtc.getYear();
+//     month = rtc.getMonth();
+//     day = rtc.getDay();
+//     hour = rtc.getHour();
+//     minutes = rtc.getMinute();
+//     seconds = rtc.getSecond();
+
+//     itoa(year, yearStr, 10);
+//     itoa(month, monthStr, 10);
+//     itoa(day, dayStr, 10);
+//     itoa(hour, hourStr, 10);
+//     itoa(minutes, minutesStr, 10);
+//     itoa(seconds, secondsStr, 10);
+
+//     // Construct the filename with the timestamp
+//     strcpy(baseString, yearStr);
+//     if(month < 10) strcat(baseString, "0");
+//     strcat(baseString, monthStr);
+//     if(day < 10) strcat(baseString, "0");
+//     strcat(baseString, dayStr);
+//     strcat(baseString, "_");
+//     if(hour < 10) strcat(baseString, "0");
+//     strcat(baseString, hourStr);
+//     if(minutes < 10) strcat(baseString, "0");
+//     strcat(baseString, minutesStr);
+//     if(seconds < 10) strcat(baseString, "0");
+//     strcat(baseString, secondsStr);
+
+//     strcpy(dataFileName, baseString);
+//     strcpy(metaFileName, baseString);
+//     strcat(dataFileName, "_data.txt");
+//     strcat(metaFileName, "_meta.txt");
+
+//     // Set the flag to true after file creation
+//     newFileCreated = true;
+// }
+  
   // RTC clock should be set (whether manually or with GPS)
   year = rtc.getYear();
   month = rtc.getMonth();
@@ -1451,7 +1506,7 @@ void createDataFiles()
     if(newFile)
     {
       #ifdef DEBUG_PRINT
-      Serial.print("ms,UTC_timestamp,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um");
+      Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure");
       #endif
       newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure\n");
     }
@@ -1980,7 +2035,7 @@ void displayPage(uint8_t page)
       display.setCursor(0, 20);
       display.print(">0.3um:");
       display.setCursor(0, 48);
-      //display.print(count_0p3um);
+      display.print(count_0p3um);
       display.setCursor(0, 62);
       display.print("count/0.1L");
       display.setTextSize(1);
@@ -2059,92 +2114,170 @@ int cmpstr(void const *a, void const *b)
 
 void getFileList()
 {
-  Serial.println("getFileList");
+  // Serial.println("getFileList");
   // Free fileList if it's malloc'd
   // (this should never be the case, but just to be sure)
   if (fileListAlloc)
   {
-    Serial.println("Deallocating files list");
+    // Serial.println("Deallocating files list");
     free(fileList);
     fileListAlloc = false;
   }
 
-  // First count files on SD card
-  #ifdef DEBUG_PRINT
+//   // First count files on SD card
+//   #ifdef DEBUG_PRINT
+//   Serial.println("\nCounting files on SD card");
+//   #endif
+//   //File root = LittleFS.open("/");
+//   // File root = SD.open("/");
+//   File file;
+//   fileCount = 0;
+//   while (file = root.openNextFile())
+//   {
+//     if (file){
+//       Serial.printf("File: %s\n", file.name());
+//       if(!file.isDirectory()){
+//         fileCount++;        
+//         Serial.printf("File added: %d\n", fileCount);
+//         #ifdef DEBUG_PRINT
+//         Serial.print('\t');
+//         Serial.println(fileCount);
+//         #endif
+//       }
+//       file.close();
+//     }
+//     else{
+//       #ifdef DEBUG_PRINT
+//       Serial.println("Error opening root");
+//       #endif
+//       break;
+//     }
+//   }
+
+// First count files on SD card
+#ifdef DEBUG_PRINT
   Serial.println("\nCounting files on SD card");
-  #endif
-  //File root = LittleFS.open("/");
-  File root = SD.open("/");
-  File file;
-  fileCount = 0;
-  while (file = root.openNextFile())
-  {
-    if (file){
-      Serial.printf("File: %s\n", file.name());
-      if(!file.isDirectory()){
-        fileCount++;        
-        Serial.printf("File added: %d\n", fileCount);
-        #ifdef DEBUG_PRINT
-        Serial.print('\t');
-        Serial.println(fileCount);
-        #endif
-      }
-      file.close();
-    }
-    else{
-      #ifdef DEBUG_PRINT
+#endif
+
+File root = SD.open("/");  // Open root directory
+fileCount = 0;
+//File file;
+
+if (!root) {
+    #ifdef DEBUG_PRINT
       Serial.println("Error opening root");
-      #endif
-      break;
+    #endif
+    // TODO: figure out how to handle this error
+} else {
+    File file = root.openNextFile();  // Open the first file in the directory
+    
+    while (file) {
+        if (!file.isDirectory()) {  // Only count regular files
+            fileCount++;
+            
+            #ifdef DEBUG_PRINT
+            Serial.print(file.name());
+            Serial.print('\t');
+            Serial.println(fileCount);
+            #endif
+        }
+        file = root.openNextFile();  // Move to the next file
     }
-  }
-   
+    root.close();  // Close the root directory
+}
 
   #ifdef DEBUG_PRINT
   Serial.print("\nFile count: ");
   Serial.println(fileCount);
   #endif
 
-  // now create an array of file names
-  char filesOnSd[fileCount][30]; // Each file name should be at most 22 characters long
-  uint32_t curFile = 0;
-  //root = LittleFS.open("/");
-  root = SD.open("/");
-  while(root.openNextFile())
-  {
-    if(!file)
-      break;
-    if(!file.isDirectory())
-    {
-      const char* fileName = file.name();
-      char shortenedFileName[30] = {0};
-      memcpy(shortenedFileName, fileName, strlen(fileName) - 4); // everything but the file extension ".txt" (to fit on screen)
-      strcpy(filesOnSd[curFile], shortenedFileName);
-      curFile++;
+  // // now create an array of file names
+  // char filesOnSd[fileCount][30]; // Each file name should be at most 22 characters long
+  // uint32_t curFile = 0;
+  // //root = LittleFS.open("/");
+  // root = SD.open("/");
+  // while(root.openNextFile())
+  // {
+  //   if(!file)
+  //     break;
+  //   if(!file.isDirectory())
+  //   {
+  //     const char* fileName = file.name();
+  //     char shortenedFileName[30] = {0};
+  //     memcpy(shortenedFileName, fileName, strlen(fileName) - 4); // everything but the file extension ".txt" (to fit on screen)
+  //     strcpy(filesOnSd[curFile], shortenedFileName);
+  //     curFile++;
+  //   }
+  //   file.close();
+  // }
+
+  // #ifdef DEBUG_PRINT
+  // Serial.println("\nList of files created (pre-sort):");
+  // for(int i = 0; i < fileCount; ++i)
+  // {
+  //   Serial.println(filesOnSd[i]);
+  // }
+  // #endif
+
+  // // Sort filesOnSd alphabetically
+  // qsort(filesOnSd, fileCount, 30, cmpstr);
+
+  // #ifdef DEBUG_PRINT
+  // Serial.println("\nList of files created:");
+  // for(int i = 0; i < fileCount; ++i)
+  // {
+  //   Serial.println(filesOnSd[i]);
+  // }
+  // #endif
+
+  // root.close();
+
+  // Now create an array of file names
+char filesOnSd[fileCount][30]; // Each file name should be at most 30 characters long
+uint32_t curFile = 0;
+
+// Open root directory
+//File root = SD.open("/");
+if (!root) {
+    #ifdef DEBUG_PRINT
+    Serial.println("Error opening root directory");
+    #endif
+    return;  // Exit if the root directory cannot be opened
+}
+
+// Loop through files in the root directory
+File file = root.openNextFile();
+while (file) {
+    if (!file.isDirectory()) {  // Only process regular files, not directories
+        char fileName[30] = {0};
+        strncpy(fileName, file.name(), sizeof(fileName) - 1);  // Copy file name to fileName array
+
+        // Remove the file extension (.txt) to fit on screen
+        char shortenedFileName[30] = {0};
+        strncpy(shortenedFileName, fileName, strlen(fileName) - 4); // Remove ".txt" (4 characters)
+        strcpy(filesOnSd[curFile], shortenedFileName);  // Copy shortened name to filesOnSd array
+        curFile++;
     }
-    file.close();
-  }
+    file = root.openNextFile();  // Move to the next file
+}
+root.close();  // Close root directory
 
-  #ifdef DEBUG_PRINT
-  Serial.println("\nList of files created (pre-sort):");
-  for(int i = 0; i < fileCount; ++i)
-  {
+#ifdef DEBUG_PRINT
+Serial.println("\nList of files created (pre-sort):");
+for (int i = 0; i < fileCount; ++i) {
     Serial.println(filesOnSd[i]);
-  }
-  #endif
+}
+#endif
 
-  // Sort filesOnSd alphabetically
-  qsort(filesOnSd, fileCount, 30, cmpstr);
+// Sort filesOnSd alphabetically
+qsort(filesOnSd, fileCount, sizeof(filesOnSd[0]), cmpstr);
 
-  #ifdef DEBUG_PRINT
-  Serial.println("\nList of files created:");
-  for(int i = 0; i < fileCount; ++i)
-  {
+#ifdef DEBUG_PRINT
+Serial.println("\nList of files created (post-sort):");
+for (int i = 0; i < fileCount; ++i) {
     Serial.println(filesOnSd[i]);
-  }
-  #endif
-
-  root.close();
+}
+#endif
 
   // copy contents fo fileList memory location
   // free()'d when the upload menu is left with the back button
