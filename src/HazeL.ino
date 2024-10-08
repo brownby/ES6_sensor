@@ -39,17 +39,37 @@
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
 // #define DEBUG_PRINT
 
+typedef struct PMDataAvg {
+  uint32_t framelen;       ///< How long this data chunk is
+  uint32_t pm10_standard,  ///< Standard PM1.0
+      pm25_standard,       ///< Standard PM2.5
+      pm100_standard;      ///< Standard PM10.0
+  uint32_t pm10_env,       ///< Environmental PM1.0
+      pm25_env,            ///< Environmental PM2.5
+      pm100_env;           ///< Environmental PM10.0
+  uint32_t particles_03um, ///< 0.3um Particle Count
+      particles_05um,      ///< 0.5um Particle Count
+      particles_10um,      ///< 1.0um Particle Count
+      particles_25um,      ///< 2.5um Particle Count
+      particles_50um,      ///< 5.0um Particle Count
+      particles_100um;     ///< 10.0um Particle Count
+  uint32_t unused;         ///< Unused
+  uint32_t checksum;       ///< Packet checksum
+} PM_Data_Avg;
+
 uint32_t sampTime = 2500; // number of ms between sensor readings
 uint32_t blockSize = 4;   // number of raw samples to average together for each reported data point
 
 Adafruit_PM25AQI dustSensor = Adafruit_PM25AQI();
 PM25_AQI_Data pmDataRaw; // raw read from sensor
-PM25_AQI_Data pmDataAvg; // block average
+PM_Data_Avg pmDataAvg; // block average
 
 typedef struct dataStruct {
   unsigned long timestamp;
   uint16_t particleCount;
 } displayData;
+
+
 displayData recentData[DISPLAY_DATA_COUNT];
 uint8_t blockCount = 0;
 bool dataDisplayFlag = false;
