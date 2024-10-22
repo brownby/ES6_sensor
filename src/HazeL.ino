@@ -42,14 +42,6 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 128
 
-// TBD
-//#define ENC_RIGHT_BUTTON A1
-// #define ENC_RIGHT_A 0
-// #define ENC_RIGHT_B 1
-// #define ENC_LEFT_BUTTON A2
-// #define ENC_LEFT_A 5
-// #define ENC_LEFT_B 7
-
 // SD card with custom pins (Not default SPI pins)
 #define SD_CS_PIN 15    // Chip Select (CS) pin for SD card
 #define SD_MISO 2      // MISO pin for SD card
@@ -59,21 +51,21 @@
 // Create an instance of the SPI class with custom pins
 SPIClass customSPI(VSPI);  // Using VSPI, but with custom GPIO pins
 
-// //Left and Right Encoder Pins
-// #define ENC_RIGHT_BUTTON 35
-// #define ENC_RIGHT_A 39
-// #define ENC_RIGHT_B 36
-// #define ENC_LEFT_BUTTON 13
-// #define ENC_LEFT_A 34
-// #define ENC_LEFT_B 12
-
 //Left and Right Encoder Pins
-#define ENC_RIGHT_BUTTON 13
-#define ENC_RIGHT_A 34
-#define ENC_RIGHT_B 12
-#define ENC_LEFT_BUTTON 35
-#define ENC_LEFT_A 39
-#define ENC_LEFT_B 36
+#define ENC_RIGHT_BUTTON 35
+#define ENC_RIGHT_A 39
+#define ENC_RIGHT_B 36
+#define ENC_LEFT_BUTTON 13
+#define ENC_LEFT_A 34
+#define ENC_LEFT_B 12
+
+// //Left and Right Encoder Pins
+// #define ENC_RIGHT_BUTTON 13
+// #define ENC_RIGHT_A 34
+// #define ENC_RIGHT_B 12
+// #define ENC_LEFT_BUTTON 35
+// #define ENC_LEFT_A 39
+// #define ENC_LEFT_B 36
 
 #define MENU_UPDATE_TIME 100 // milliseconds between menu updates
 #define DEBUG_PRINT
@@ -197,7 +189,7 @@ void setup() {
   Wire.begin(32, 27); // SDA on GPIO32, SCL on GPIO27
   // Initialize comms with OLED display
   DisplaySetup();
-  display.setRotation(2);
+  display.setRotation(0);   //2
   setLCDBacklight(255);
   for (int i =0; i < 200; i++)
     DisplayLoop();
@@ -267,7 +259,7 @@ void setup() {
   // pinMode(PM_RESET_PIN, OUTPUT);
   digitalWrite(PM_SET_PIN, HIGH); 
   // digitalWrite(PM_RESET_PIN, LOW);
-  PM_SERIAL.begin(9600,SERIAL_8N1, 17, 16);
+  PM_SERIAL.begin(9600);
   pms.init();
 
   // Initialize dust sensor
@@ -294,7 +286,7 @@ void setup() {
   //For RTC Library
   //rtc.begin(); 
   //FOr ESP32TIme Library
-  rtc.setTime(0, 0, 0, 01, 10, 2024);  // Set a default time (HH, MM, SS, DD, MM, YYYY)
+  rtc.setTime(0, 0, 0, 1, 1, 2024);  // Set a default time (HH, MM, SS, DD, MM, YYYY)
 
 
   encLeft.begin();
@@ -716,100 +708,168 @@ void handleFileDownload() {
 }
 
 // update samples in SD card
-void updateSampleSD() {
+void updateSampleSD()
+{
   bool timeoutFlag = false;
   time_t utcTime;
 
   unsigned long msTimer;
 
-  if (firstMeasurementFlag) {
+  if(firstMeasurementFlag)
+  {
     firstMeasurementFlag = false;
     msTimer = 0;
     dataStartMillis = millis();
-  } else {
+  }
+  else
+  {
     msTimer = millis() - dataStartMillis;
   }
 
   float temp;
   float press;
-
-  // Read the PM sensor
+    // read the PM sensor
   pms.read();
+  
+ uint16_t PM1p0_atm = pms.pm01;      // PM1.0 concentration in μg/m³
+ uint16_t PM2p5_atm = pms.pm25;      // PM2.5 concentration in μg/m³
+ uint16_t PM10p0_atm = pms.pm10;     // PM10.0 concentration in μg/m³
+ 
+ uint16_t count_0p3um = pms.n0p3;    // Number of particles with diameter > 0.3µm
+ uint16_t count_0p5um = pms.n0p5;    // Number of particles with diameter > 0.5µm
+ uint16_t count_1p0um = pms.n1p0;    // Number of particles with diameter > 1.0µm
+ uint16_t count_2p5um = pms.n2p5;    // Number of particles with diameter > 2.5µm
+ uint16_t count_5p0um = pms.n5p0;    // Number of particles with diameter > 5.0µm
+ uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0µm
 
-  uint16_t PM1p0_atm = pms.pm01;    // PM1.0 concentration in μg/m³
-  uint16_t PM2p5_atm = pms.pm25;    // PM2.5 concentration in μg/m³
-  uint16_t PM10p0_atm = pms.pm10;   // PM10.0 concentration in μg/m³
-
-  uint16_t count_0p3um = pms.n0p3;  // Number of particles with diameter > 0.3µm
-  uint16_t count_0p5um = pms.n0p5;  // Number of particles with diameter > 0.5µm
-  uint16_t count_1p0um = pms.n1p0;  // Number of particles with diameter > 1.0µm
-  uint16_t count_2p5um = pms.n2p5;  // Number of particles with diameter > 2.5µm
-  uint16_t count_5p0um = pms.n5p0;  // Number of particles with diameter > 5.0µm
-  uint16_t count_10p0um = pms.n10p0; // Number of particles with diameter > 10.0µm
-
-  if (timestampFlag) {  // If it's time to get a time stamp
-    // Read temperature and pressure
+  if(timestampFlag) // if it is time to get a time stamp
+  {
+    // read temperature and pressure
     temp = TPSensor.getTemperature();
     press = TPSensor.getPressure();
 
     // If you chose to use GPS, keep getting time, lat, long, and alt fom GPS
-    if (!manualTimeEntry) {
+    if(!manualTimeEntry)
+    {
       display.clearDisplay();
+      display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
+      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
+      display.setTextColor(ST7735_WHITE);
+      display.setCursor(10, display.height()-8);
+      display.print("Back ");
       updateDisplay("Reading GPS...", 40, false);
       display.display();
 
-      // Wake up GPS module
-      if (!gpsAwake) {
+      // wake up GPS module
+      if (!gpsAwake)
+      {
         toggleGps();
       }
-
       unsigned long gpsReadCurMillis;
       unsigned long gpsReadStartMillis = millis();
       unsigned long gpsTimeoutMillis = GPS_TIMEOUT;
 
-      // Read GPS data until it's valid (5 seconds timeout)
-      while (true) {
+      #ifdef DEBUG_PRINT
+      unsigned long preRead = millis();
+      #endif
+
+      // Read GPS data until it's valid
+      // 5 second timeout
+      while (true)
+      {
         gpsReadCurMillis = millis();
+
         readGps();
 
-        if (gpsReadCurMillis - gpsReadStartMillis >= gpsTimeoutMillis) {
+        if (gpsReadCurMillis - gpsReadStartMillis >= gpsTimeoutMillis)
+        {
           timeoutFlag = true;
           gpsDisplayFail = true;
+          #ifdef DEBUG_PRINT 
+          Serial.println("GPS timeout");
+          #endif
           break;
         }
 
-        if (gps.date.isValid() && gps.time.isValid() && gps.location.isValid() && gps.altitude.isValid() && gps.date.year() == CUR_YEAR) {
+        if (gps.date.isValid() && gps.time.isValid() && gps.location.isValid() && gps.altitude.isValid() && gps.date.year() == CUR_YEAR)
+        {
+          #ifdef DEBUG_PRINT
+          Serial.println("GPS data valid");
+          #endif
+
+          // set time for now()
           setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year());
-          if (now() > prevTimeStamp) {
+
+          // check for stale GPS timestamps
+          if (now() > prevTimeStamp)
+          {
             prevTimeStamp = now();
             gpsDisplayFail = false;
 
-            rtc.setTime(gps.time.second(), gps.time.minute(), gps.time.hour(), gps.date.day(), gps.date.month(), gps.date.year());
-            if (!rtcSet) rtcSet = true;
+            // resync RTC every successful GPS read
+            // TBD
+            // rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
+            // rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
+
+            // Resync RTC every successful GPS read
+            // Update RTC with GPS date and time
+            rtc.setTime(
+              gps.time.second(),    // seconds
+              gps.time.minute(),    // minutes
+              gps.time.hour(),      // hours
+              gps.date.day(),       // day
+              gps.date.month(),     // month
+              gps.date.year()       // year
+            );
+
+            if(!rtcSet) rtcSet = true;
             break;
           }
+          #ifdef DEBUG_PRINT
+          else
+          {
+            Serial.println("Stale timestamp, continuing GPS read");
+          }
+          #endif
+        
         }
 
-        if (encLeftButtonFlag) {
-          if (gpsAwake) {
+        // make GPS reads interruptible by the button being pressed
+        if (encLeftButtonFlag)
+        {
+          // Put GPS to sleep
+          if (gpsAwake)
+          {
             toggleGps();
           }
+          // TODO: test if this returns to the proper page
           return;
         }
       }
+      
+      #ifdef DEBUG_PRINT
+      unsigned long postRead = millis();
+      Serial.print("GPS read took: "); Serial.print(postRead - preRead); Serial.println(" ms");
+      #endif
 
+      // store UTC time
       utcTime = now();
+
       latitude = gps.location.lat();
       longitude = gps.location.lng();
       altitude = gps.altitude.meters();
 
-      if (gpsAwake) {
+      // put GPS to sleep
+      if (gpsAwake)
+      {
         toggleGps();
-        if (timeoutFlag) {
-          delay(500);  // Add extra delay after timeout
+        if (timeoutFlag)
+        {
+          delay(500); // add extra delay after timeout to make sure sleep command is properly interpreted before next read
         }
       }
 
+      // store time from GPS
       utcYear = year(utcTime);
       utcMonth = month(utcTime);
       utcDay = day(utcTime);
@@ -817,529 +877,267 @@ void updateSampleSD() {
       utcMinute = minute(utcTime);
       utcSecond = second(utcTime);
     }
+    
+    if(manualTimeEntry || timeoutFlag) // if manual time entry or GPS timed out, overwrite timestamp with RTC values
+    {
+      //// For RTC Library
+      // utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
+      // utcMonth = rtc.getMonth();
+      // utcDay = rtc.getDay();
+      // utcHour = rtc.getHours();
+      // utcMinute = rtc.getMinutes();
+      // utcSecond = rtc.getSeconds();
 
-    if (manualTimeEntry || timeoutFlag) {
-      utcYear = year();
-      utcMonth = month();
-      utcDay = day();
-      utcHour = hour();
-      utcMinute = minute();
-      utcSecond = second();
+      // For TimeLib Library
+      utcYear = year();       // Returns the year (e.g., 2024)
+      utcMonth = month();     // Returns the month (1 = January, 12 = December)
+      utcDay = day();         // Returns the day of the month
+      utcHour = hour();       // Returns the current hour (0-23)
+      utcMinute = minute();   // Returns the current minute (0-59)
+      utcSecond = second();   // Returns the current second (0-59)
+
     }
 
     metaFile = SD.open(startWithSlash(metaFileName), FILE_APPEND);
-    
-    if (metaFile) {
-      String metaEntry = String(msTimer) + "," + String(utcYear) + "-" + String(utcMonth) + "-" + String(utcDay) + "T" +
-                         (utcHour < 10 ? "0" : "") + String(utcHour) + ":" +
-                         (utcMinute < 10 ? "0" : "") + String(utcMinute) + ":" +
-                         (utcSecond < 10 ? "0" : "") + String(utcSecond) + "+00:00";
+    // metaFile = SD.open(metaFileName, FILE_WRITE);
 
-      if (manualTimeEntry || timeoutFlag) {
-        metaEntry += ",,,";
-      } else {
-        metaEntry += "," + String(latitude, 5) + "," + String(longitude, 5) + "," + String(altitude);
+    if(metaFile)
+    {
+      Serial.print("# ");
+      Serial.print(msTimer);
+      Serial.print(',');
+      Serial.print(utcYear);
+      Serial.print('-');
+      Serial.print(utcMonth);
+      Serial.print('-');
+      Serial.print(utcDay);
+      Serial.print('T');
+      if(utcHour < 10) Serial.print('0');
+      Serial.print(utcHour);
+      Serial.print(':') ;
+      if(utcMinute < 10) Serial.print('0');
+      Serial.print(utcMinute);
+      Serial.print(':');
+      if(utcSecond < 10) Serial.print('0');
+      Serial.print(utcSecond);
+      Serial.print("+00:00");
+
+      Serial.print("Writing to meta file...");
+      metaFile.print(msTimer);
+      metaFile.print(',');
+      metaFile.print(utcYear);
+      metaFile.print('-');
+      metaFile.print(utcMonth);
+      metaFile.print('-');
+      metaFile.print(utcDay);
+      metaFile.print('T');
+      if(utcHour < 10) metaFile.print('0');
+      metaFile.print(utcHour);
+      metaFile.print(':') ;
+      if(utcMinute < 10) metaFile.print('0');
+      metaFile.print(utcMinute);
+      metaFile.print(':');
+      if(utcSecond < 10) metaFile.print('0');
+      metaFile.print(utcSecond);
+      metaFile.print("+00:00");
+
+      // do not report lat, long, alt
+      if(manualTimeEntry || timeoutFlag)
+      {
+        Serial.print(",,,");
+        metaFile.print(",,,");
+      }
+      else
+      {
+        Serial.print(',');
+        Serial.print(latitude, 5);
+        Serial.print(',');
+        Serial.print(longitude, 5);
+        Serial.print(',');
+        Serial.print(altitude);
+
+        metaFile.print(',');
+        metaFile.print(latitude, 5);
+        metaFile.print(',');
+        metaFile.print(longitude, 5);
+        metaFile.print(',');
+        metaFile.print(altitude);
       }
 
-      metaEntry += "," + String(temp, 2) + "," + String(press, 2);
-      metaEntry += "," + String(pms.pm01) + "," + String(pms.pm25) + "," + String(pms.pm10);
-      metaEntry += "," + String(pms.n0p3) + "," + String(pms.n0p5) + "," + String(pms.n1p0);
-      metaEntry += "," + String(pms.n2p5) + "," + String(pms.n5p0) + "," + String(pms.n10p0);
-      metaEntry += '\n';
+      Serial.print(',');
+      Serial.print(temp, 2);
+      Serial.print(',');
+      Serial.print(press, 2);
 
-      metaFile.print(metaEntry);  // Write the entire entry at once
+      metaFile.print(',');
+      metaFile.print(temp, 2);
+      metaFile.print(',');
+      metaFile.print(press, 2);
+      metaFile.print(",");
+      metaFile.print(pms.pm01);    // PM1.0 (atmo)
+      metaFile.print(",");
+      metaFile.print(pms.pm25);    // PM2.5 (atmo)
+      metaFile.print(",");
+      metaFile.print(pms.pm10);    // PM10.0 (atmo)
+      metaFile.print(",");
+      metaFile.print(pms.n0p3);    // >0.3µm particle count
+      metaFile.print(",");
+      metaFile.print(pms.n0p5);    // >0.5µm particle count
+      metaFile.print(",");
+      metaFile.print(pms.n1p0);    // >1.0µm particle count
+      metaFile.print(",");
+      metaFile.print(pms.n2p5);    // >2.5µm particle count
+      metaFile.print(",");
+      metaFile.print(pms.n5p0);    // >5.0µm particle count
+      metaFile.print(",");
+      metaFile.print(pms.n10p0);   // >10.0µm particle count
+      metaFile.print('\n');
       metaFile.flush();  // Ensure data is written to the file
       metaFile.close();
-
-      Serial.println("Meta file written.");
-      // Print results to Serial Monitor in a single row
-      Serial.print("PM1.0: "); Serial.print(PM1p0_atm); Serial.print(", ");
-      Serial.print("PM2.5: "); Serial.print(PM2p5_atm); Serial.print(", ");
-      Serial.print("PM10: "); Serial.print(PM10p0_atm); Serial.print(", ");
-      Serial.print(">0.3μm: "); Serial.print(count_0p3um); Serial.print(", ");
-      Serial.print(">0.5μm: "); Serial.print(count_0p5um); Serial.print(", ");
-      Serial.print(">1.0μm: "); Serial.print(count_1p0um); Serial.print(", ");
-      Serial.print(">2.5μm: "); Serial.print(count_2p5um); Serial.print(", ");
-      Serial.print(">5.0μm: "); Serial.print(count_5p0um); Serial.print(", ");
-      Serial.print(">10.0μm: "); Serial.println(count_10p0um); // Use println for the last item
-    } else {
-      Serial.println("Couldn't open meta file.");
+      Serial.println("done.");
+    }
+    else
+    {
+      #ifdef DEBUG_PRINT
+      Serial.println("Couldn't open gps file");
+      #endif
       display.clearDisplay();
       updateDisplay("Couldn't open GPS file", 40, false);
       display.display();
-      delay(500);
+      // delay(500); //comment for now
     }
   }
-}
 
-
-// // update samples in SD card
-// void updateSampleSD()
-// {
-//   bool timeoutFlag = false;
-//   time_t utcTime;
-
-//   unsigned long msTimer;
-
-//   if(firstMeasurementFlag)
-//   {
-//     firstMeasurementFlag = false;
-//     msTimer = 0;
-//     dataStartMillis = millis();
-//   }
-//   else
-//   {
-//     msTimer = millis() - dataStartMillis;
-//   }
-
-//   float temp;
-//   float press;
-//     // read the PM sensor
+//   // read the PM sensor
 //   pms.read();
   
 //  uint16_t PM1p0_atm = pms.pm01;      // PM1.0 concentration in μg/m³
-//  uint16_t PM2p5_atm = pms.pm25;      // PM2.5 concentration in μg/m³
-//  uint16_t PM10p0_atm = pms.pm10;     // PM10.0 concentration in μg/m³
- 
-//  uint16_t count_0p3um = pms.n0p3;    // Number of particles with diameter > 0.3µm
-//  uint16_t count_0p5um = pms.n0p5;    // Number of particles with diameter > 0.5µm
-//  uint16_t count_1p0um = pms.n1p0;    // Number of particles with diameter > 1.0µm
-//  uint16_t count_2p5um = pms.n2p5;    // Number of particles with diameter > 2.5µm
-//  uint16_t count_5p0um = pms.n5p0;    // Number of particles with diameter > 5.0µm
-//  uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0µm
+// uint16_t PM2p5_atm = pms.pm25;      // PM2.5 concentration in μg/m³
+// uint16_t PM10p0_atm = pms.pm10;     // PM10.0 concentration in μg/m³
 
-//   if(timestampFlag) // if it is time to get a time stamp
-//   {
-//     // read temperature and pressure
-//     temp = TPSensor.getTemperature();
-//     press = TPSensor.getPressure();
+// uint16_t count_0p3um = pms.n0p3;    // Number of particles with diameter > 0.3µm
+// uint16_t count_0p5um = pms.n0p5;    // Number of particles with diameter > 0.5µm
+// uint16_t count_1p0um = pms.n1p0;    // Number of particles with diameter > 1.0µm
+// uint16_t count_2p5um = pms.n2p5;    // Number of particles with diameter > 2.5µm
+// uint16_t count_5p0um = pms.n5p0;    // Number of particles with diameter > 5.0µm
+// uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0µm
 
-//     // If you chose to use GPS, keep getting time, lat, long, and alt fom GPS
-//     if(!manualTimeEntry)
-//     {
-//       display.clearDisplay();
-//       // display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
-//       // display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-//       // display.setTextColor(ST7735_WHITE);
-//       // display.setCursor(10, display.height()-8);
-//       // display.print("Back ");
-//        display.drawLine(-30, display.height() -12, display.width() -3, display.height() -12, ST7735_WHITE);
-//       display.drawLine((display.width()/2) -1, display.height() -10, (display.width()/2) -1, display.height() -1, ST7735_WHITE);
-//       display.setTextColor(ST7735_WHITE);
-//        display.setCursor(10, display.height() -10); //For 1.8 TFT
-//         display.print("Back ");
-//       updateDisplay("Reading GPS...", 40, false);
-//       display.display();
+  // Display data to serial monitor and OLED display
+  // Store data on SD card
+  dataFile = SD.open(startWithSlash(dataFileName), FILE_APPEND);
+  // dataFile = SD.open(dataFileName, FILE_WRITE);
+  if(dataFile)
+  {
 
-//       // wake up GPS module
-//       if (!gpsAwake)
-//       {
-//         toggleGps();
-//       }
-//       unsigned long gpsReadCurMillis;
-//       unsigned long gpsReadStartMillis = millis();
-//       unsigned long gpsTimeoutMillis = GPS_TIMEOUT;
+    // Get timestamp from RTC
+    utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
+    utcMonth = rtc.getMonth();
+    utcDay = rtc.getDay();
+    utcHour = rtc.getHour();
+    utcMinute = rtc.getMinute();
+    utcSecond = rtc.getSecond();
 
-//       #ifdef DEBUG_PRINT
-//       unsigned long preRead = millis();
-//       #endif
-
-//       // Read GPS data until it's valid
-//       // 5 second timeout
-//       while (true)
-//       {
-//         gpsReadCurMillis = millis();
-
-//         readGps();
-
-//         if (gpsReadCurMillis - gpsReadStartMillis >= gpsTimeoutMillis)
-//         {
-//           timeoutFlag = true;
-//           gpsDisplayFail = true;
-//           #ifdef DEBUG_PRINT 
-//           Serial.println("GPS timeout");
-//           #endif
-//           break;
-//         }
-
-//         if (gps.date.isValid() && gps.time.isValid() && gps.location.isValid() && gps.altitude.isValid() && gps.date.year() == CUR_YEAR)
-//         {
-//           #ifdef DEBUG_PRINT
-//           Serial.println("GPS data valid");
-//           #endif
-
-//           // set time for now()
-//           setTime(gps.time.hour(), gps.time.minute(), gps.time.second(), gps.date.day(), gps.date.month(), gps.date.year());
-
-//           // check for stale GPS timestamps
-//           if (now() > prevTimeStamp)
-//           {
-//             prevTimeStamp = now();
-//             gpsDisplayFail = false;
-
-//             // resync RTC every successful GPS read
-//             // TBD
-//             // rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() % 100);
-//             // rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
-
-//             // Resync RTC every successful GPS read
-//             // Update RTC with GPS date and time
-//             rtc.setTime(
-//               gps.time.second(),    // seconds
-//               gps.time.minute(),    // minutes
-//               gps.time.hour(),      // hours
-//               gps.date.day(),       // day
-//               gps.date.month(),     // month
-//               gps.date.year()       // year
-//             );
-
-//             if(!rtcSet) rtcSet = true;
-//             break;
-//           }
-//           #ifdef DEBUG_PRINT
-//           else
-//           {
-//             Serial.println("Stale timestamp, continuing GPS read");
-//           }
-//           #endif
-        
-//         }
-
-//         // make GPS reads interruptible by the button being pressed
-//         if (encLeftButtonFlag)
-//         {
-//           // Put GPS to sleep
-//           if (gpsAwake)
-//           {
-//             toggleGps();
-//           }
-//           // TODO: test if this returns to the proper page
-//           return;
-//         }
-//       }
-      
-//       #ifdef DEBUG_PRINT
-//       unsigned long postRead = millis();
-//       Serial.print("GPS read took: "); Serial.print(postRead - preRead); Serial.println(" ms");
-//       #endif
-
-//       // store UTC time
-//       utcTime = now();
-
-//       latitude = gps.location.lat();
-//       longitude = gps.location.lng();
-//       altitude = gps.altitude.meters();
-
-//       // put GPS to sleep
-//       if (gpsAwake)
-//       {
-//         toggleGps();
-//         if (timeoutFlag)
-//         {
-//           delay(500); // add extra delay after timeout to make sure sleep command is properly interpreted before next read
-//         }
-//       }
-
-//       // store time from GPS
-//       utcYear = year(utcTime);
-//       utcMonth = month(utcTime);
-//       utcDay = day(utcTime);
-//       utcHour = hour(utcTime);
-//       utcMinute = minute(utcTime);
-//       utcSecond = second(utcTime);
-//     }
+    // Display data in the serial monitor
     
-//     if(manualTimeEntry || timeoutFlag) // if manual time entry or GPS timed out, overwrite timestamp with RTC values
-//     {
-//       //// For RTC Library
-//       // utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
-//       // utcMonth = rtc.getMonth();
-//       // utcDay = rtc.getDay();
-//       // utcHour = rtc.getHours();
-//       // utcMinute = rtc.getMinutes();
-//       // utcSecond = rtc.getSeconds();
+    Serial.print(msTimer);
+    Serial.print(',');
+    Serial.print(utcYear);
+    Serial.print('-');
+    Serial.print(utcMonth);
+    Serial.print('-');
+    Serial.print(utcDay);
+    Serial.print('T');
+    if(utcHour < 10) Serial.print('0');
+    Serial.print(utcHour);
+    Serial.print(':') ;
+    if(utcMinute < 10) Serial.print('0');
+    Serial.print(utcMinute);
+    Serial.print(':');
+    if(utcSecond < 10) Serial.print('0');
+    Serial.print(utcSecond);
+    Serial.print("+00:00");
+    Serial.print(',');
+    Serial.print(pms.pm01);       // Print PM1.0 concentration
+    Serial.print(',');
+    Serial.print(pms.pm25);       // Print PM2.5 concentration
+    Serial.print(',');
+    Serial.print(pms.pm10);       // Print PM10.0 concentration
+    Serial.print(',');
+    Serial.print(pms.n0p3);       // Print count of particles > 0.3µm
+    Serial.print(',');
+    Serial.print(pms.n0p5);       // Print count of particles > 0.5µm
+    Serial.print(',');
+    Serial.print(pms.n1p0);       // Print count of particles > 1.0µm
+    Serial.print(',');
+    Serial.print(pms.n2p5);       // Print count of particles > 2.5µm
+    Serial.print(',');
+    Serial.print(pms.n5p0);       // Print count of particles > 5.0µm
+    Serial.print(',');
+    Serial.print(pms.n10p0);      // Print count of particles > 10.0µm
 
-//       // For TimeLib Library
-//       utcYear = year();       // Returns the year (e.g., 2024)
-//       utcMonth = month();     // Returns the month (1 = January, 12 = December)
-//       utcDay = day();         // Returns the day of the month
-//       utcHour = hour();       // Returns the current hour (0-23)
-//       utcMinute = minute();   // Returns the current minute (0-59)
-//       utcSecond = second();   // Returns the current second (0-59)
-
-//     }
-
-//     metaFile = SD.open(startWithSlash(metaFileName), FILE_APPEND);
-//     // metaFile = SD.open(metaFileName, FILE_WRITE);
-
-//     if(metaFile)
-//     {
-//       Serial.print("# ");
-//       Serial.print(msTimer);
-//       Serial.print(',');
-//       Serial.print(utcYear);
-//       Serial.print('-');
-//       Serial.print(utcMonth);
-//       Serial.print('-');
-//       Serial.print(utcDay);
-//       Serial.print('T');
-//       if(utcHour < 10) Serial.print('0');
-//       Serial.print(utcHour);
-//       Serial.print(':') ;
-//       if(utcMinute < 10) Serial.print('0');
-//       Serial.print(utcMinute);
-//       Serial.print(':');
-//       if(utcSecond < 10) Serial.print('0');
-//       Serial.print(utcSecond);
-//       Serial.print("+00:00");
-
-//       Serial.print("Writing to meta file...");
-//       metaFile.print(msTimer);
-//       metaFile.print(',');
-//       metaFile.print(utcYear);
-//       metaFile.print('-');
-//       metaFile.print(utcMonth);
-//       metaFile.print('-');
-//       metaFile.print(utcDay);
-//       metaFile.print('T');
-//       if(utcHour < 10) metaFile.print('0');
-//       metaFile.print(utcHour);
-//       metaFile.print(':') ;
-//       if(utcMinute < 10) metaFile.print('0');
-//       metaFile.print(utcMinute);
-//       metaFile.print(':');
-//       if(utcSecond < 10) metaFile.print('0');
-//       metaFile.print(utcSecond);
-//       metaFile.print("+00:00");
-
-//       // do not report lat, long, alt
-//       if(manualTimeEntry || timeoutFlag)
-//       {
-//         Serial.print(",,,");
-//         metaFile.print(",,,");
-//       }
-//       else
-//       {
-//         Serial.print(',');
-//         Serial.print(latitude, 5);
-//         Serial.print(',');
-//         Serial.print(longitude, 5);
-//         Serial.print(',');
-//         Serial.print(altitude);
-
-//         metaFile.print(',');
-//         metaFile.print(latitude, 5);
-//         metaFile.print(',');
-//         metaFile.print(longitude, 5);
-//         metaFile.print(',');
-//         metaFile.print(altitude);
-//       }
-
-//       Serial.print(',');
-//       Serial.print(temp, 2);
-//       Serial.print(',');
-//       Serial.print(press, 2);
-
-//       metaFile.print(',');
-//       metaFile.print(temp, 2);
-//       metaFile.print(',');
-//       metaFile.print(press, 2);
-//       metaFile.print(",");
-//       metaFile.print(pms.pm01);    // PM1.0 (atmo)
-//       metaFile.print(",");
-//       metaFile.print(pms.pm25);    // PM2.5 (atmo)
-//       metaFile.print(",");
-//       metaFile.print(pms.pm10);    // PM10.0 (atmo)
-//       metaFile.print(",");
-//       metaFile.print(pms.n0p3);    // >0.3µm particle count
-//       metaFile.print(",");
-//       metaFile.print(pms.n0p5);    // >0.5µm particle count
-//       metaFile.print(",");
-//       metaFile.print(pms.n1p0);    // >1.0µm particle count
-//       metaFile.print(",");
-//       metaFile.print(pms.n2p5);    // >2.5µm particle count
-//       metaFile.print(",");
-//       metaFile.print(pms.n5p0);    // >5.0µm particle count
-//       metaFile.print(",");
-//       metaFile.print(pms.n10p0);   // >10.0µm particle count
-//       metaFile.print('\n');
-//       metaFile.flush();  // Ensure data is written to the file
-//       metaFile.close();
-//       Serial.println("done.");
-//     }
-//     else
-//     {
-//       #ifdef DEBUG_PRINT
-//       Serial.println("Couldn't open gps file");
-//       #endif
-//       display.clearDisplay();
-//       updateDisplay("Couldn't open GPS file", 40, false);
-//       display.display();
-//       delay(500); 
-//     }
-//   }
-
-// //   // read the PM sensor
-// //   pms.read();
+    Serial.println();
+    Serial.print("Writing to data file...");
+    dataFile.print(msTimer);
+    dataFile.print(',');
+    dataFile.print(utcYear);
+    dataFile.print('-');
+    dataFile.print(utcMonth);
+    dataFile.print('-');
+    dataFile.print(utcDay);
+    dataFile.print('T');
+    if(utcHour < 10) dataFile.print('0');
+    dataFile.print(utcHour);
+    dataFile.print(':') ;
+    if(utcMinute < 10) dataFile.print('0');
+    dataFile.print(utcMinute);
+    dataFile.print(':');
+    if(utcSecond < 10) dataFile.print('0');
+    dataFile.print(utcSecond);
+    dataFile.print("+00:00");
   
-// //  uint16_t PM1p0_atm = pms.pm01;      // PM1.0 concentration in μg/m³
-// // uint16_t PM2p5_atm = pms.pm25;      // PM2.5 concentration in μg/m³
-// // uint16_t PM10p0_atm = pms.pm10;     // PM10.0 concentration in μg/m³
+    dataFile.print(",");
+    dataFile.print(pms.pm01);    // PM1.0 (atmo)
+    dataFile.print(",");
+    dataFile.print(pms.pm25);    // PM2.5 (atmo)
+    dataFile.print(",");
+    dataFile.print(pms.pm10);    // PM10.0 (atmo)
+    dataFile.print(",");
+    dataFile.print(pms.n0p3);    // >0.3µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n0p5);    // >0.5µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n1p0);    // >1.0µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n2p5);    // >2.5µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n5p0);    // >5.0µm particle count
+    dataFile.print(",");
+    dataFile.print(pms.n10p0);   // >10.0µm particle count
 
-// // uint16_t count_0p3um = pms.n0p3;    // Number of particles with diameter > 0.3µm
-// // uint16_t count_0p5um = pms.n0p5;    // Number of particles with diameter > 0.5µm
-// // uint16_t count_1p0um = pms.n1p0;    // Number of particles with diameter > 1.0µm
-// // uint16_t count_2p5um = pms.n2p5;    // Number of particles with diameter > 2.5µm
-// // uint16_t count_5p0um = pms.n5p0;    // Number of particles with diameter > 5.0µm
-// // uint16_t count_10p0um = pms.n10p0;  // Number of particles with diameter > 10.0µm
+    dataFile.print('\n');
+    dataFile.flush();  // Ensure data is written to the file
+    dataFile.close();
+    Serial.println("done.");
 
-//   // Display data to serial monitor and OLED display
-//   // Store data on SD card
-//   dataFile = SD.open(startWithSlash(dataFileName), FILE_APPEND);
-//   // dataFile = SD.open(dataFileName, FILE_WRITE);
-//   if(dataFile)
-//   {
+    ledFlag = true;
+  }
+  else
+  {
+    #ifdef DEBUG_PRINT
+    Serial.println("Couldn't open file");
+    #endif
+    display.clearDisplay();
+    updateDisplay("Couldn't open data file", 40, false);
+    display.display();
+    delay(500);
+  }
 
-//     // Get timestamp from RTC
-//     utcYear = rtc.getYear() + 2000; // RTC year is stored as an offset from 2000
-//     utcMonth = rtc.getMonth();
-//     utcDay = rtc.getDay();
-//     utcHour = rtc.getHour();
-//     utcMinute = rtc.getMinute();
-//     utcSecond = rtc.getSecond();
+  if(timestampFlag)
+  {
+    timestampFlag = false;
+  }
 
-//     // Display data in the serial monitor
-    
-//     Serial.print(msTimer);
-//     Serial.print(',');
-//     Serial.print(utcYear);
-//     Serial.print('-');
-//     Serial.print(utcMonth);
-//     Serial.print('-');
-//     Serial.print(utcDay);
-//     Serial.print('T');
-//     if(utcHour < 10) Serial.print('0');
-//     Serial.print(utcHour);
-//     Serial.print(':') ;
-//     if(utcMinute < 10) Serial.print('0');
-//     Serial.print(utcMinute);
-//     Serial.print(':');
-//     if(utcSecond < 10) Serial.print('0');
-//     Serial.print(utcSecond);
-//     Serial.print("+00:00");
-
-//     Serial.print(',');
-//     Serial.print(pms.pm01);       // Print PM1.0 concentration
-//     Serial.print(',');
-//     Serial.print(pms.pm25);       // Print PM2.5 concentration
-//     Serial.print(',');
-//     Serial.print(pms.pm10);       // Print PM10.0 concentration
-//     Serial.print(',');
-//     Serial.print(pms.n0p3);       // Print count of particles > 0.3µm
-//     Serial.print(',');
-//     Serial.print(pms.n0p5);       // Print count of particles > 0.5µm
-//     Serial.print(',');
-//     Serial.print(pms.n1p0);       // Print count of particles > 1.0µm
-//     Serial.print(',');
-//     Serial.print(pms.n2p5);       // Print count of particles > 2.5µm
-//     Serial.print(',');
-//     Serial.print(pms.n5p0);       // Print count of particles > 5.0µm
-//     Serial.print(',');
-//     Serial.print(pms.n10p0);      // Print count of particles > 10.0µm
-
-//     Serial.println();
-//     Serial.print("Writing to data file...");
-//     dataFile.print(msTimer);
-//     dataFile.print(',');
-//     dataFile.print(utcYear);
-//     dataFile.print('-');
-//     dataFile.print(utcMonth);
-//     dataFile.print('-');
-//     dataFile.print(utcDay);
-//     dataFile.print('T');
-//     if(utcHour < 10) dataFile.print('0');
-//     dataFile.print(utcHour);
-//     dataFile.print(':') ;
-//     if(utcMinute < 10) dataFile.print('0');
-//     dataFile.print(utcMinute);
-//     dataFile.print(':');
-//     if(utcSecond < 10) dataFile.print('0');
-//     dataFile.print(utcSecond);
-//     dataFile.print("+00:00");
-
-//      // do not report lat, long, alt
-//     if(manualTimeEntry || timeoutFlag)
-//     {
-//       Serial.print(",,,");
-//       dataFile.print(",,,");
-//     }
-//     else
-//     {
-//       Serial.print(',');
-//       Serial.print(latitude, 5);
-//       Serial.print(',');
-//       Serial.print(longitude, 5);
-//       Serial.print(',');
-//       Serial.print(altitude);   
-//       dataFile.print(',');
-//       dataFile.print(latitude, 5);
-//       dataFile.print(',');
-//       dataFile.print(longitude, 5);
-//       dataFile.print(',');
-//       dataFile.print(altitude);
-//     }   
-//     Serial.print(',');
-//     Serial.print(temp, 2);
-//     Serial.print(',');
-//     Serial.print(press, 2);
-//     dataFile.print(',');
-//     dataFile.print(temp, 2);
-//     dataFile.print(',');
-//     dataFile.print(press, 2);
-  
-//     dataFile.print(",");
-//     dataFile.print(pms.pm01);    // PM1.0 (atmo)
-//     dataFile.print(",");
-//     dataFile.print(pms.pm25);    // PM2.5 (atmo)
-//     dataFile.print(",");
-//     dataFile.print(pms.pm10);    // PM10.0 (atmo)
-//     dataFile.print(",");
-//     dataFile.print(pms.n0p3);    // >0.3µm particle count
-//     dataFile.print(",");
-//     dataFile.print(pms.n0p5);    // >0.5µm particle count
-//     dataFile.print(",");
-//     dataFile.print(pms.n1p0);    // >1.0µm particle count
-//     dataFile.print(",");
-//     dataFile.print(pms.n2p5);    // >2.5µm particle count
-//     dataFile.print(",");
-//     dataFile.print(pms.n5p0);    // >5.0µm particle count
-//     dataFile.print(",");
-//     dataFile.print(pms.n10p0);   // >10.0µm particle count
-
-//     dataFile.print('\n');
-//     dataFile.flush();  // Ensure data is written to the file
-//     dataFile.close();
-//     Serial.println("done.");
-
-//     ledFlag = true;
-//   }
-//   else
-//   {
-//     #ifdef DEBUG_PRINT
-//     Serial.println("Couldn't open file");
-//     #endif
-//     display.clearDisplay();
-//     updateDisplay("Couldn't open data file", 40, false);
-//     display.display();
-//     delay(500);
-//   }
-
-//   if(timestampFlag)
-//   {
-//     timestampFlag = false;
-//   }
-
-// }
+}
 
 // void updateSampleSD()
 // {
@@ -1955,19 +1753,11 @@ void createDataFiles()
     unsigned long gpsTimeoutMillis = GPS_FIRST_TIMEOUT;
 
       display.clearDisplay();
-      // display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
-      // display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-      // display.setTextColor(ST7735_WHITE);
-      // display.setCursor(10, display.height()-8);
-      // display.print("Back ");
-       
-      display.drawLine(-30, display.height() -12, display.width() -3, display.height() -12, ST7735_WHITE);
-      display.drawLine((display.width()/2) -1, display.height() -10, (display.width()/2) -1, display.height() -1, ST7735_WHITE);
+      display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
+      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
       display.setTextColor(ST7735_WHITE);
-      display.setCursor(10, display.height() -10); //For 1.8 TFT
+      display.setCursor(10, display.height()-8);
       display.print("Back ");
-
-
       updateDisplay("Reading GPS...", 40, false);
       updateDisplay("(First GPS read", 56, false);
       updateDisplay("may take a", 64, false);
@@ -2150,9 +1940,9 @@ metaFileName = fileNameSeed + "_mata.csv";
     if(newFile)
     {
       #ifdef DEBUG_PRINT
-      Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um");
+      Serial.print("ms,UTC_timestamp,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um");
       #endif
-      newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um\n");
+      newFile.print("ms,UTC_timestamp,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um\n");
     }
     else 
     {
@@ -2502,8 +2292,8 @@ void displayPage(uint8_t page)
   display.drawLine((display.width()/2) -1, display.height() -10, (display.width()/2) -1, display.height() -1, ST7735_WHITE);
   // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, ST7735_WHITE);
   display.setTextColor(ST7735_WHITE);
-  // display.setCursor(50, display.height()+8); // For 1.44 TFT
-  display.setCursor(10, display.height() -10); //For 1.8 TFT
+  display.setCursor(10, display.height()-8); // For 1.8 TFT
+  // display.setCursor(10, display.height() -10); //For 1.44 TFT
   display.print("Back ");
   if(page == 2 || page == 3) // only the date and time page uses the left knob for left-right
   {
@@ -2513,7 +2303,8 @@ void displayPage(uint8_t page)
   }
   if (page != 5) // no select button on data collection screen
   {
-    display.setCursor((display.width()/3) + 25, display.height()-10);
+    display.setCursor((display.width()/2) + 5, display.height()-8);  //1.8
+    // display.setCursor((display.width()/3) + 25, display.height()-10); //1.44
     display.cp437(true);
     display.print("\x1e\x1f");
     display.cp437(false);
@@ -2526,43 +2317,48 @@ void displayPage(uint8_t page)
     {
       if (currentVertMenuSelection == 0)
       {
-        // updateDisplay("Start data collection\n", 0, true);
-        // updateDisplay("Upload data", 8, false);
-        updateDisplay("Start data collection\n", 32, true);
-        updateDisplay("Upload data", 40, false);
+        updateDisplay("Start data collection\n", 0, true);
+        updateDisplay("Upload data", 8, false);
+        // updateDisplay("Start data collection\n", 32, true);
+        // updateDisplay("Upload data", 40, false);
       }
       else if (currentVertMenuSelection == 1)
       {
-        // updateDisplay("Start data collection\n", 0, false);
-        // updateDisplay("Upload data", 8, true);
-        updateDisplay("Start data collection\n", 32, false);
-        updateDisplay("Upload data", 40, true);
+        updateDisplay("Start data collection\n", 0, false);
+        updateDisplay("Upload data", 8, true);
+        // updateDisplay("Start data collection\n", 32, false);
+        // updateDisplay("Upload data", 40, true);
       }
       break;
     }
     case(1): // Time entry method menu
     {
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
-      // updateDisplay("Timestamp method?", 0, false);
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
-      updateDisplay("Timestamp method?", 32, false);
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      updateDisplay("Timestamp method?", 0, false);
+      // display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      // updateDisplay("Timestamp method?", 32, false);
       if (currentVertMenuSelection == 0)        
       {
-        updateDisplay("Auto (GPS)\n", 44, true);        //12
-        updateDisplay("Manual", 52, false);             //20
+        // updateDisplay("Auto (GPS)\n", 44, true);        //12
+        // updateDisplay("Manual", 52, false);             //20
+        updateDisplay("Auto (GPS)\n", 12, true);
+        updateDisplay("Manual", 20, false); 
       }
       else if (currentVertMenuSelection == 1)
       {
-        updateDisplay("Auto (GPS)\n", 44, false);      //12
-        updateDisplay("Manual", 52, true);     //20
+        // updateDisplay("Auto (GPS)\n", 44, false);      //12
+        // updateDisplay("Manual", 52, true);     //20
+        updateDisplay("Auto (GPS)\n", 12, false);      //12
+        updateDisplay("Manual", 20, true);
       }
       break;
     }
     case(2): // Date entry
     {
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
-      updateDisplay("Enter date", 32, false);    // 0
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      updateDisplay("Enter date", 0, false);
+      // display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      // updateDisplay("Enter date", 32, false);    // 0
 
       char displayMonth[3];
       char displayDay[3];
@@ -2600,10 +2396,10 @@ void displayPage(uint8_t page)
     }
     case(3): // Time entry
     {
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
-      // updateDisplay("Enter time (UTC)", 0, false);  
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
-      updateDisplay("Enter time (UTC)", 32, false);    
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      updateDisplay("Enter time (UTC)", 0, false);  
+      // display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      // updateDisplay("Enter time (UTC)", 32, false);    
       char displayHour[3];
       char displayMinute[3];
 
@@ -2647,10 +2443,10 @@ void displayPage(uint8_t page)
       // Serial.println();
       // #endif
 
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
-      // updateDisplay("Select a file", 0, false);  
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);   //42
-      updateDisplay("Select a file", 32, false);  
+      display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      updateDisplay("Select a file", 0, false);  
+      // display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      // updateDisplay("Select a file", 32, false);  
 
       uint8_t numFilesToDisplay = 0;
 
@@ -2718,12 +2514,16 @@ void displayPage(uint8_t page)
       itoa(utcDay, dayText, 10);
       itoa(utcYear, yearText, 10);
 
-      display.setTextSize(1);   //2
-      display.setCursor(5, 52);  
+      // display.setTextSize(1);   //2
+      display.setTextSize(2);
+      // display.setCursor(0, 52);
+      display.setCursor(0, 20);  
       display.print(">0.3um:");
-      display.setCursor(5, 76);   //48
+      // display.setCursor(0, 76);   //48
+      display.setCursor(0, 48);
       display.print(count_0p3um);
-      display.setCursor(5, 94);   //62
+      // display.setCursor(0, 94);   //62
+      display.setCursor(0, 62);
       display.print("count/0.1L");
       display.setTextSize(1);
 
@@ -2761,7 +2561,7 @@ void displayPage(uint8_t page)
       strcat(timeText, minuteText);
       if(gpsDisplayFail || manualTimeEntry) strcat(timeText, " (RTC)");
       else strcat(timeText, " (GPS)");
-      updateDisplay(timeText, 120, false);     //42
+      updateDisplay(timeText, 108, false);
       // updateDisplay(timeText, -20, false);
       break;
     }
