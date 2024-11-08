@@ -29,6 +29,9 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
+uint16_t LCD_FOREGROUND = ST7735_WHITE;
+uint16_t LCD_BACKGROUND = ST7735_BLACK;
+
 #define SAMP_TIME 2500 // number of ms between sensor readings
 #define BLINK_TIME 30 // time in ms between LED blinks on successful write to SD
 #define GPS_TIME 10000 // time between GPS reads
@@ -77,6 +80,7 @@ BMP280 TPSensor;
 //#define SD LittleFS
 File dataFile;  
 File metaFile;
+File imageFile;
 String dataFileName; // YYMMDD_HHMMSS_data.txt
 String metaFileName; // YYMMDD_HHMMSS_meta.txt
 char * fileList; // list of files on SD card
@@ -85,7 +89,7 @@ uint32_t fileCount = 0; // number of files on SD card
 char fileToUpload[30];
 
 // Replace with your network credentials
-const char* ssid     = "ESP32";
+const char* ssid     = "QosainPM08";
 const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
@@ -180,7 +184,9 @@ void encoderISR()
 void setup() {
   // initialize Serial port
   Serial.begin(115200);
-
+  //                 rrrrrggggggbbbbb
+  LCD_FOREGROUND = 0b0000001011100000;
+  LCD_BACKGROUND = 0b1111111111111111;
   // intialize comms with GPS module
   // Controller Rx -> 14, Tx -> 26
   Serial1.begin(9600, SERIAL_8N1, 26, 14);
@@ -194,7 +200,7 @@ void setup() {
   for (int i =0; i < 200; i++)
     DisplayLoop();
 
-  display.clearDisplay();
+  display.clearDisplay(LCD_BACKGROUND);
   // display.setTextSize(3);
   // updateDisplay("Qosain Scientific", 70, false);
   // delay(2000);
@@ -215,7 +221,7 @@ void setup() {
   #ifdef DEBUG_PRINT
   Serial.println("Initialize SD");
   #endif
-  display.clearDisplay();
+  display.clearDisplay(LCD_BACKGROUND);
   updateDisplay("Checking SD", 40, false);
   display.display();
   delay(2500);
@@ -230,7 +236,7 @@ void setup() {
     #ifdef DEBUG_PRINT
     Serial.println("Card failed");
     #endif
-    display.clearDisplay();
+    display.clearDisplay(LCD_BACKGROUND);
     updateDisplay("SD card failed", 32, false);
     updateDisplay("Reset device", 48, false);
     display.display();
@@ -241,11 +247,12 @@ void setup() {
     #ifdef DEBUG_PRINT
     Serial.println("Card initialized successfully");
     #endif
-    display.clearDisplay();
+    display.clearDisplay(LCD_BACKGROUND);
     updateDisplay("SD card detected", 40, false);
     display.display();
   }
   delay(2500);
+
   // Initialize WiFi
   WiFi.softAP(ssid, password);
   IPAddress IP = WiFi.softAPIP();
@@ -273,7 +280,7 @@ void setup() {
   //   #ifdef DEBUG_PRINT
   //   Serial.println("Failed to initialize dust sensor");
   //   #endif
-  //   display.clearDisplay();
+  //   display.clearDisplay(LCD_BACKGROUND);
   //   updateDisplay("Dust sensor init failed", 32, false);
   //   updateDisplay("Reset device", 48, false);
   //   display.display();
@@ -644,6 +651,18 @@ void loop() {
 
 }
 
+// Function to convert RGB to RGB565
+uint16_t RGBtoRGB565(byte r, byte g, byte b) {
+    // Scale the 8-bit values to the 5, 6, and 5 bits needed for RGB565
+    uint16_t r565 = round(r / 255.0f * 31.0f); // 5-bit red
+    uint16_t g565 = round(g / 255.0f * 63.0f); // 6-bit green
+    uint16_t b565 = round(b / 255.0f * 31.0f); // 5-bit blue
+
+    // Combine the components into a single 16-bit value
+    uint16_t rgb565 = (r565 << 11) | (g565 << 5) | b565;
+    return rgb565;
+}
+
 // ISR for button being pressed
 void encRightButtonISR()
 {
@@ -747,10 +766,10 @@ void updateSampleSD() {
 
         // If you chose to use GPS, keep getting time, lat, long, and alt from GPS
         if (!manualTimeEntry) {
-            display.clearDisplay();
-            display.drawLine(0, display.height() - 12, display.width() - 1, display.height() - 12, ST7735_WHITE);
-            display.drawLine(display.width() / 2 - 1, display.height() - 10, display.width() / 2 - 1, display.height() - 1, ST7735_WHITE);
-            display.setTextColor(ST7735_WHITE);
+            display.clearDisplay(LCD_BACKGROUND);
+            display.drawLine(0, display.height() - 12, display.width() - 1, display.height() - 12, LCD_FOREGROUND);
+            display.drawLine(display.width() / 2 - 1, display.height() - 10, display.width() / 2 - 1, display.height() - 1, LCD_FOREGROUND);
+            display.setTextColor(LCD_FOREGROUND);
             display.setCursor(10, display.height() - 10);
             display.print("Back ");
             updateDisplay("Reading GPS...", 40, false);
@@ -906,7 +925,7 @@ void updateSampleSD() {
         #ifdef DEBUG_PRINT
         Serial.println("Couldn't open data file");
         #endif
-        display.clearDisplay();
+        display.clearDisplay(LCD_BACKGROUND);
         updateDisplay("Couldn't open data file", 40, false);
         display.display();
     }
@@ -963,10 +982,10 @@ void updateSampleSD() {
 //     // If you chose to use GPS, keep getting time, lat, long, and alt fom GPS
 //     if(!manualTimeEntry)
 //     {
-//       display.clearDisplay();
-//       display.drawLine(0, display.height()-12, display.width()-1, display.height()-12, ST7735_WHITE);
-//       display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-//       display.setTextColor(ST7735_WHITE);
+//       display.clearDisplay(LCD_BACKGROUND);
+//       display.drawLine(0, display.height()-12, display.width()-1, display.height()-12, LCD_FOREGROUND);
+//       display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, LCD_FOREGROUND);
+//       display.setTextColor(LCD_FOREGROUND);
 //       display.setCursor(10, display.height()-10);
 //       display.print("Back ");
 //       updateDisplay("Reading GPS...", 40, false);
@@ -1213,7 +1232,7 @@ void updateSampleSD() {
 //       #ifdef DEBUG_PRINT
 //       Serial.println("Couldn't open gps file");
 //       #endif
-//       display.clearDisplay();
+//       display.clearDisplay(LCD_BACKGROUND);
 //       updateDisplay("Couldn't open GPS file", 40, false);
 //       display.display();
 //       // delay(500); //comment for now
@@ -1338,7 +1357,7 @@ void updateSampleSD() {
 //     #ifdef DEBUG_PRINT
 //     Serial.println("Couldn't open file");
 //     #endif
-//     display.clearDisplay();
+//     display.clearDisplay(LCD_BACKGROUND);
 //     updateDisplay("Couldn't open data file", 40, false);
 //     display.display();
 //     delay(500);
@@ -1381,10 +1400,10 @@ void updateSampleSD() {
 //     // If you chose to use GPS, keep getting time, lat, long, and alt fom GPS
 //     if(!manualTimeEntry)
 //     {
-//       display.clearDisplay();
-//       display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
-//       display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-//       display.setTextColor(ST7735_WHITE);
+//       display.clearDisplay(LCD_BACKGROUND);
+//       display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, LCD_FOREGROUND);
+//       display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, LCD_FOREGROUND);
+//       display.setTextColor(LCD_FOREGROUND);
 //       display.setCursor(10, display.height()-8);
 //       display.print("Back ");
 //       updateDisplay("Reading GPS...", 40, false);
@@ -1613,7 +1632,7 @@ void updateSampleSD() {
 //       #ifdef DEBUG_PRINT
 //       Serial.println("Couldn't open gps file");
 //       #endif
-//       display.clearDisplay();
+//       display.clearDisplay(LCD_BACKGROUND);
 //       updateDisplay("Couldn't open GPS file", 40, false);
 //       display.display();
 //       delay(500);
@@ -1795,7 +1814,7 @@ void updateSampleSD() {
 //     #ifdef DEBUG_PRINT
 //     Serial.println("Couldn't open file");
 //     #endif
-//     display.clearDisplay();
+//     display.clearDisplay(LCD_BACKGROUND);
 //     updateDisplay("Couldn't open data file", 40, false);
 //     display.display();
 //     delay(500);
@@ -1816,7 +1835,7 @@ void uploadSerial(char * fileName, uint32_t wait)
   encLeftButtonISREn = false;
   uint8_t buffer[512] = {0}; // buffer to read/write data 512 bytes at a time
   uint16_t writeLen = sizeof(buffer);
-  display.clearDisplay();
+  display.clearDisplay(LCD_BACKGROUND);
   updateDisplay("Uploading ", 40, false);
   updateDisplay(fileName, 48, false);
   updateDisplay("via serial port", 56, false);
@@ -1964,10 +1983,10 @@ void createDataFiles()
     unsigned long gpsReadStartMillis = millis();
     unsigned long gpsTimeoutMillis = GPS_FIRST_TIMEOUT;
 
-      display.clearDisplay();
-      display.drawLine(0, display.height()-12, display.width()-1, display.height()-12, ST7735_WHITE);  //-10
-      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-      display.setTextColor(ST7735_WHITE);
+      display.clearDisplay(LCD_BACKGROUND);
+      display.drawLine(0, display.height()-12, display.width()-1, display.height()-12, LCD_FOREGROUND);  //-10
+      display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, LCD_FOREGROUND);
+      display.setTextColor(LCD_FOREGROUND);
       display.setCursor(10, display.height()-10);       //  -8
       display.print("Back ");
       updateDisplay("Reading GPS...", 40, false);
@@ -1994,10 +2013,10 @@ void createDataFiles()
         #ifdef DEBUG_PRINT 
         Serial.println("GPS timeout");
         #endif
-        display.clearDisplay();
-        display.drawLine(0, display.height()-12, display.width()-1, display.height()-12, ST7735_WHITE);     //-10
-        display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-        display.setTextColor(ST7735_WHITE);
+        display.clearDisplay(LCD_BACKGROUND);
+        display.drawLine(0, display.height()-12, display.width()-1, display.height()-12, LCD_FOREGROUND);     //-10
+        display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, LCD_FOREGROUND);
+        display.setTextColor(LCD_FOREGROUND);
         display.setCursor(10, display.height()-10);    //-8
         display.print("Back ");
         updateDisplay("GPS read failed", 40, false);
@@ -2501,13 +2520,13 @@ void displayPage(uint8_t page)
 {
   // On all pages add "select" and "back" indicators on the bottom of the screen
   // On data collection page, only show "back"
-  display.clearDisplay();
-  // display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, ST7735_WHITE);
-  // display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, ST7735_WHITE);
-  display.drawLine(-30, display.height() -12, display.width() -3, display.height() -12, ST7735_WHITE);
-  display.drawLine((display.width()/2) -1, display.height() -10, (display.width()/2) -1, display.height() -1, ST7735_WHITE);
-  // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, ST7735_WHITE);
-  display.setTextColor(ST7735_WHITE);
+  display.clearDisplay(LCD_BACKGROUND);
+  // display.drawLine(0, display.height()-10, display.width()-1, display.height()-10, LCD_FOREGROUND);
+  // display.drawLine(display.width()/2 - 1, display.height()-10, display.width()/2 - 1, display.height()-1, LCD_FOREGROUND);
+  display.drawLine(-30, display.height() -12, display.width() -3, display.height() -12, LCD_FOREGROUND);
+  display.drawLine((display.width()/2) -1, display.height() -10, (display.width()/2) -1, display.height() -1, LCD_FOREGROUND);
+  // display.drawLine((2*display.width()/3)-1, display.height()-10, (2*display.width()/3)-1, display.height()-1, LCD_FOREGROUND);
+  display.setTextColor(LCD_FOREGROUND);
   // display.setCursor(10, display.height()-8); // For 1.8 TFT
   display.setCursor(10, display.height() -10); //For 1.44 TFT
   display.print("Back ");
@@ -2549,9 +2568,9 @@ void displayPage(uint8_t page)
     }
     case(1): // Time entry method menu
     {
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
       // updateDisplay("Timestamp method?", 0, false);
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
       updateDisplay("Timestamp method?", 32, false);
       if (currentVertMenuSelection == 0)        
       {
@@ -2571,9 +2590,9 @@ void displayPage(uint8_t page)
     }
     case(2): // Date entry
     {
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
       // updateDisplay("Enter date", 0, false);
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
       updateDisplay("Enter date", 30, false);    // 0
 
       char displayMonth[3];
@@ -2589,32 +2608,32 @@ void displayPage(uint8_t page)
       // display.setTextSize(1);
       // display.setCursor(0, 10);
 
-      if(currentHoriMenuSelection == 0) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
+      if(currentHoriMenuSelection == 0) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
       if(manualMonth < 10) display.print('0');
       display.print(manualMonth);
 
-      display.setTextColor(ST7735_WHITE);
+      display.setTextColor(LCD_FOREGROUND);
       display.print('/');
 
-      if(currentHoriMenuSelection == 1) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
+      if(currentHoriMenuSelection == 1) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
       if(manualDay < 10) display.print('0');
       display.print(manualDay);
 
-      display.setTextColor(ST7735_WHITE);
+      display.setTextColor(LCD_FOREGROUND);
       display.print('/');
 
-      if(currentHoriMenuSelection == 2) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
+      if(currentHoriMenuSelection == 2) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
       display.print(manualYear);
 
-      display.setTextColor(ST7735_WHITE);
+      display.setTextColor(LCD_FOREGROUND);
       display.setTextSize(1);
       break;
     }
     case(3): // Time entry
     {
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
       // updateDisplay("Enter time (UTC)", 0, false);  
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
       updateDisplay("Enter time (UTC)", 32, false);    
       char displayHour[3];
       char displayMinute[3];
@@ -2627,18 +2646,18 @@ void displayPage(uint8_t page)
       // display.setTextSize(1);
       // display.setCursor(0, 10);
 
-      if(currentHoriMenuSelection == 0) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
+      if(currentHoriMenuSelection == 0) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
       if(manualHour < 10) display.print('0');
       display.print(manualHour);
 
-      display.setTextColor(ST7735_WHITE);
+      display.setTextColor(LCD_FOREGROUND);
       display.print(':');
 
-      if(currentHoriMenuSelection == 1) display.setTextColor(ST7735_BLACK, ST7735_WHITE);
+      if(currentHoriMenuSelection == 1) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
       if(manualMinute < 10) display.print('0');
       display.print(manualMinute);
 
-      display.setTextColor(ST7735_WHITE);
+      display.setTextColor(LCD_FOREGROUND);
       display.setTextSize(1);
 
       break;
@@ -2659,9 +2678,9 @@ void displayPage(uint8_t page)
       // Serial.println();
       // #endif
 
-      // display.drawLine(0, 10, display.width()-1, 10, ST7735_WHITE);
+      // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
       // updateDisplay("Select a file", 0, false);  
-      display.drawLine(0, 42, display.width()-1, 42, ST7735_WHITE);
+      display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
       updateDisplay("Select a file", 32, false);  
 
       uint8_t numFilesToDisplay = 0;
@@ -2807,17 +2826,17 @@ void displayPage(uint8_t page)
 // function for displaying characters to OLED 
 void updateDisplay(char* text, uint8_t height, bool bg)
 {
-  // if(clear) display.clearDisplay();
+  // if(clear) display.clearDisplay(LCD_BACKGROUND);
 
   display.setTextSize(1);
 
   if(bg) 
   {
-    display.setTextColor(ST7735_BLACK, ST7735_WHITE);
+    display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
   }
   else
   { 
-    display.setTextColor(ST7735_WHITE);
+    display.setTextColor(LCD_FOREGROUND);
   }
   display.setCursor(0, height);
 
