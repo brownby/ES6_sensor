@@ -90,7 +90,7 @@ char fileToUpload[30];
 bool timeSetOnce = false;
 
 // Replace with your network credentials
-const char* ssid     = "QosainPM08";
+const char* ssid     = "QosainPM15";
 const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
@@ -262,10 +262,15 @@ void setup() {
   Serial.println(IP);
 
   // Initialize web server
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/list", HTTP_GET, handleFileList);
-  server.on("/download", HTTP_GET, handleFileDownload);
+  server.on("/", HTTP_GET, handleRoot);                // Handle root route
+  server.on("/list", HTTP_GET, handleFileList);         // Handle file list route
+  server.on("/download", HTTP_GET, handleFileDownload); // Handle file download route
+  // server.on("/index", HTTP_GET, handleIndex);           // Serve index.html route
+  server.on("/latest", HTTP_GET, handleLatestData);     // Handle latest file data route
+  server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
+
   server.begin();
+  Serial.println("Server started");
 
   pinMode(PM_SET_PIN, OUTPUT);
   // pinMode(PM_RESET_PIN, OUTPUT);
@@ -490,12 +495,12 @@ void loop() {
       {
         if(currentVertMenuSelection == 0) // Use GPS for time stamp
         {
-          manualTimeEntry = false;
-          createDataFiles(); // create the names for the data and gps files for data collection
+          manualTimeEntry = true;
+          // createDataFiles(); // create the names for the data and gps files for data collection
           // State and page are set from within createDataFiles() so that I can set it to different things on success and failure
-        }
-        else if(currentVertMenuSelection == 1) // Use manual entry + RTC
-        {
+        // }
+        // else if(currentVertMenuSelection == 1) // Use manual entry + RTC
+        // {
           page = 2; // enter date
           if(rtcSet)
           {
@@ -665,6 +670,32 @@ uint16_t RGBtoRGB565(byte r, byte g, byte b) {
     return rgb565;
 }
 
+String getLatestFileName() {
+  File root = SD.open("/");  // Open the root directory
+  String latestFileName = "";
+  uint32_t latestDateTime = 0;
+
+  while (File file = root.openNextFile()) {
+    String fileName = file.name();  // Get the name of the current file
+    file.close();
+
+    // Check if the file ends with ".txt_data" and has the proper length (to avoid incomplete files)
+    if (fileName.endsWith(".txt_data") && fileName.length() >= 21) {
+      String datePart = fileName.substring(0, 8);   // Extract YYYYMMDD
+      String timePart = fileName.substring(9, 15);  // Extract HHMMSS
+
+      uint32_t dateTimeValue = datePart.toInt() * 1000000 + timePart.toInt();  // Combine date and time into a single number for comparison
+
+      if (dateTimeValue > latestDateTime) {
+        latestDateTime = dateTimeValue;
+        latestFileName = fileName;
+      }
+    }
+  }
+  return latestFileName;
+}
+
+
 // ISR for button being pressed
 void encRightButtonISR()
 {
@@ -692,37 +723,121 @@ void handleRoot() {
   server.send(200, "text/html", html);
 }
 
-// Handle file listing
-void handleFileList() {
-  String html = "<html><body><h1>SD Card File List</h1>";
-  html += "<ul>";
-  
-  File root = SD.open("/");
-  File file = root.openNextFile();
-  
-  while (file) {
-    if (!file.isDirectory()) {
-      html += "<li><a href='/download?file=";
-      html += file.name();
-      html += "'>";
-      html += file.name();
-      html += "</a></li>";
-    }
-    file = root.openNextFile();
+void handleIndex() {
+  File file = SD.open("/index.html");
+  if (file) {
+    server.streamFile(file, "text/html");
+    file.close();
+  } else {
+    server.send(404, "text/plain", "404: Not Found");
   }
-  
-  html += "</ul></body></html>";
-  server.send(200, "text/html", html);
 }
 
+void handleLatestData() {
+  String latestFileName = getLatestFileName();  // Get the latest file name
+  Serial.println("Latest file: " + latestFileName);  // Debugging: Print latest file name
+
+  if (latestFileName == "") {
+    server.send(404, "text/plain", "No files found");
+    return;
+  }
+
+  File file = SD.open("/" + latestFileName);  // Open the latest file
+  if (file) {
+    String fileContent = "";
+    while (file.available()) {
+      fileContent += file.readString();  // Read the content of the file
+    }
+    file.close();
+    Serial.println("File content: " + fileContent);  // Debugging: Print file content
+    server.send(200, "text/plain", fileContent);  // Send content back as plain text
+  } else {
+    server.send(404, "text/plain", "File could not be opened");
+  }
+}
+
+
+// // Handle file listing
+// void handleFileList() {
+//   String html = "<html><body><h1>SD Card File List</h1>";
+//   html += "<ul>";
+  
+//   File root = SD.open("/");
+//   File file = root.openNextFile();
+  
+//   while (file) {
+//     if (!file.isDirectory()) {
+//       html += "<li><a href='/download?file=";
+//       html += file.name();
+//       html += "'>";
+//       html += file.name();
+//       html += "</a></li>";
+//     }
+//     file = root.openNextFile();
+//   }
+  
+//   html += "</ul></body></html>";
+//   server.send(200, "text/html", html);
+// }
+
 // Handle file download
+// void handleFileDownload() {
+//   if (server.hasArg("file")) {
+//     String path = "/" + server.arg("file");
+    
+//     if (SD.exists(path)) {
+//       File file = SD.open(path, FILE_READ);
+//       server.streamFile(file, "application/octet-stream");
+//       file.close();
+//     } else {
+//       server.send(404, "text/plain", "File not found");
+//     }
+//   } else {
+//     server.send(400, "text/plain", "No file specified");
+//   }
+// }
+
+// void handleFileDownload() {
+//   if (server.hasArg("file")) {
+//     String path = "/" + server.arg("file");
+    
+//     if (SD.exists(path)) {
+//       File file = SD.open(path, FILE_READ);
+      
+//       // Get the filename from the path and set the correct content disposition
+//       String filename = path.substring(path.lastIndexOf("/") + 1);
+//       server.sendHeader("Content-Disposition", "attachment; filename=" + filename);
+      
+//       // Set the correct MIME type for CSV files
+//       String mimeType = "text/csv";
+      
+//       // Stream the file with the correct MIME type
+//       server.streamFile(file, mimeType);
+//       file.close();
+//     } else {
+//       server.send(404, "text/plain", "File not found");
+//     }
+//   } else {
+//     server.send(400, "text/plain", "No file specified");
+//   }
+// }
+
 void handleFileDownload() {
   if (server.hasArg("file")) {
     String path = "/" + server.arg("file");
     
     if (SD.exists(path)) {
       File file = SD.open(path, FILE_READ);
-      server.streamFile(file, "application/octet-stream");
+      
+      // Get the filename from the path and set the correct content disposition
+      String filename = path.substring(path.lastIndexOf("/") + 1);
+      server.sendHeader("Content-Disposition", "attachment; filename=" + filename);
+      
+      // Set the correct MIME type for CSV files
+      String mimeType = "text/csv";
+      
+      // Stream the file with the correct MIME type
+      server.streamFile(file, mimeType);
       file.close();
     } else {
       server.send(404, "text/plain", "File not found");
@@ -731,6 +846,61 @@ void handleFileDownload() {
     server.send(400, "text/plain", "No file specified");
   }
 }
+
+// Function to handle file deletion
+void handleFileDelete() {
+  if (server.hasArg("file")) {
+    String path = "/" + server.arg("file");
+    
+    if (SD.exists(path)) {
+      if (SD.remove(path)) {
+        server.send(200, "text/plain", "File deleted successfully");
+      } else {
+        server.send(500, "text/plain", "Failed to delete file");
+      }
+    } else {
+      server.send(404, "text/plain", "File not found");
+    }
+  } else {
+    server.send(400, "text/plain", "No file specified");
+  }
+}
+
+// Function to display the list of files with delete and download options
+void handleFileList() {
+  String html = "<html><body><h1>Available Files</h1><ul>";
+  
+  File dir = SD.open("/");
+  while (File entry = dir.openNextFile()) {
+    String filename = entry.name();
+    html += "<li>" + filename + " ";
+    html += "<a href='/download?file=" + filename + "'>Download</a> ";
+    html += "<a href='/delete?file=" + filename + "'>Delete</a>";
+    html += "</li>";
+  }
+  html += "</ul></body></html>";
+  
+  server.send(200, "text/html", html);
+}
+
+// function to delete files
+// void handleFileDelete() {
+//   if (server.hasArg("file")) {
+//     String path = "/" + server.arg("file");
+    
+//     if (SD.exists(path)) {
+//       if (SD.remove(path)) {
+//         server.send(200, "text/plain", "File deleted successfully");
+//       } else {
+//         server.send(500, "text/plain", "Failed to delete file");
+//       }
+//     } else {
+//       server.send(404, "text/plain", "File not found");
+//     }
+//   } else {
+//     server.send(400, "text/plain", "No file specified");
+//   }
+// }
 
 // update samples in SD card
 void updateSampleSD() {
@@ -886,27 +1056,27 @@ void updateSampleSD() {
         dataFile.print(utcSecond);
         dataFile.print("+00:00");
 
-        if (manualTimeEntry || timeoutFlag) {
-            dataFile.print(",,,");
-        } else {
-            dataFile.print(',');
-            dataFile.print(latitude, 5);
-            dataFile.print(',');
-            dataFile.print(longitude, 5);
-            dataFile.print(',');
-            dataFile.print(altitude);
-        }
+        // if (manualTimeEntry || timeoutFlag) {
+        //     dataFile.print(",,,");
+        // } else {
+        //     dataFile.print(',');
+        //     dataFile.print(latitude, 5);
+        //     dataFile.print(',');
+        //     dataFile.print(longitude, 5);
+        //     dataFile.print(',');
+        //     dataFile.print(altitude);
+        // }
 
         dataFile.print(',');
         dataFile.print(temp, 2);
         dataFile.print(',');
-        dataFile.print(press, 2);
-        dataFile.print(",");
-        dataFile.print(PM1p0_atm);    // PM1.0 (atmo)
-        dataFile.print(",");
+        // dataFile.print(press, 2);
+        // dataFile.print(",");
+        // dataFile.print(PM1p0_atm);    // PM1.0 (atmo)
+        // dataFile.print(",");
         dataFile.print(PM2p5_atm);    // PM2.5 (atmo)
-        dataFile.print(",");
-        dataFile.print(PM10p0_atm);   // PM10.0 (atmo)
+        // dataFile.print(",");
+        // dataFile.print(PM10p0_atm);   // PM10.0 (atmo)
         // dataFile.print(",");
         // dataFile.print(count_0p3um);   // >0.3µm particle count
         // dataFile.print(",");
@@ -1187,47 +1357,6 @@ void createDataFiles()
     toggleGps();
   }
 
-  
-//   // Reset the file creation flag at the beginning of every power cycle
-// if(!newFileCreated) {
-//     // RTC clock should be set (whether manually or with GPS)
-//     year = rtc.getYear();
-//     month = rtc.getMonth();
-//     day = rtc.getDay();
-//     hour = rtc.getHour();
-//     minutes = rtc.getMinute();
-//     seconds = rtc.getSecond();
-
-//     itoa(year, yearStr, 10);
-//     itoa(month, monthStr, 10);
-//     itoa(day, dayStr, 10);
-//     itoa(hour, hourStr, 10);
-//     itoa(minutes, minutesStr, 10);
-//     itoa(seconds, secondsStr, 10);
-
-//     // Construct the filename with the timestamp
-//     strcpy(baseString, yearStr);
-//     if(month < 10) strcat(baseString, "0");
-//     strcat(baseString, monthStr);
-//     if(day < 10) strcat(baseString, "0");
-//     strcat(baseString, dayStr);
-//     strcat(baseString, "_");
-//     if(hour < 10) strcat(baseString, "0");
-//     strcat(baseString, hourStr);
-//     if(minutes < 10) strcat(baseString, "0");
-//     strcat(baseString, minutesStr);
-//     if(seconds < 10) strcat(baseString, "0");
-//     strcat(baseString, secondsStr);
-
-//     strcpy(dataFileName, baseString);
-//     strcpy(metaFileName, baseString);
-//     strcat(dataFileName, "_data.txt");
-//     strcat(metaFileName, "_meta.txt");
-
-//     // Set the flag to true after file creation
-//     newFileCreated = true;
-// }
-
 // Get current time from RTC
 int year; 
 int month;
@@ -1238,6 +1367,7 @@ int seconds;
 
 if(gpsAwake)
 {
+  toggleGps;
   year = rtc.getYear();
   month = rtc.getMonth();
   day = rtc.getDay();
@@ -1259,7 +1389,7 @@ String fileNameSeed = String(year) + (month < 10 ? "0" : "") + String(month) +
                (day < 10 ? "0" : "") + String(day) + "_" +
                (hour < 10 ? "0" : "") + String(hour) +
                (minutes < 10 ? "0" : "") + String(minutes) +
-               (seconds < 10 ? "0" : "") + String(seconds) + ".txt";
+               (seconds < 10 ? "0" : "") + String(seconds);
                
 dataFileName = fileNameSeed + "_data.csv";
 metaFileName = fileNameSeed + "_mata.csv";
@@ -1289,9 +1419,12 @@ metaFileName = fileNameSeed + "_mata.csv";
       // #endif
       // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um\n");
       #ifdef DEBUG_PRINT
-      Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
+      // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
+      // #endif
+      // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
+      Serial.print("ms,UTC_timestamp,temperature,PM2.5");
       #endif
-      newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
+      newFile.print("ms,UTC_timestamp,temperature,PM2.5\n");
     }
     else 
     {
@@ -1335,7 +1468,7 @@ void updateMenuSelection()
       switch (page)
       {
         case 0: case 1: // initial two menus
-          if(currentVertMenuSelection > 1) currentVertMenuSelection = 1; // only two choices on these pages
+          if(currentVertMenuSelection = 0 || currentVertMenuSelection > 0 || currentVertMenuSelection < 0) currentVertMenuSelection = 0; // only two choices on these pages
           break;
         case 2: // entering date
           if(currentHoriMenuSelection == 0) // month
@@ -1655,14 +1788,14 @@ void displayPage(uint8_t page)
         // updateDisplay("Start data collection\n", 0, true);
         // updateDisplay("Upload data", 8, false);
         updateDisplay("Start data collection\n", 32, true);
-        updateDisplay("Upload data", 40, false);
+        //updateDisplay("Upload data", 40, false);
       }
       else if (currentVertMenuSelection == 1)
       {
         // updateDisplay("Start data collection\n", 0, false);
         // updateDisplay("Upload data", 8, true);
         updateDisplay("Start data collection\n", 32, false);
-        updateDisplay("Upload data", 40, true);
+        //updateDisplay("Upload data", 40, true);
       }
       break;
     }
@@ -1674,18 +1807,18 @@ void displayPage(uint8_t page)
       updateDisplay("Timestamp method?", 32, false);
       if (currentVertMenuSelection == 0)        
       {
-        updateDisplay("Auto (GPS)\n", 44, true);        //12
-        updateDisplay("Manual", 52, false);             //20
+        //updateDisplay("Auto (GPS)\n", 44, true);        //12
+        updateDisplay("Manual Entry", 44, true);             //52
         // updateDisplay("Auto (GPS)\n", 12, true);
         // updateDisplay("Manual", 20, false); 
       }
-      else if (currentVertMenuSelection == 1)
-      {
-        updateDisplay("Auto (GPS)\n", 44, false);      //12
-        updateDisplay("Manual", 52, true);     //20
-        // updateDisplay("Auto (GPS)\n", 12, false);      //12
-        // updateDisplay("Manual", 20, true);
-      }
+      // else if (currentVertMenuSelection == 1)
+      // {
+      //   // updateDisplay("Auto (GPS)\n", 44, false);      //12
+      //   updateDisplay("Manual Entry", 44, true);     //52
+      //   // updateDisplay("Auto (GPS)\n", 12, false);      //12
+      //   // updateDisplay("Manual", 20, true);
+      // }
       break;
     }
     case(2): // Date entry
@@ -1734,7 +1867,7 @@ void displayPage(uint8_t page)
       // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
       // updateDisplay("Enter time (UTC)", 0, false);  
       display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
-      updateDisplay("Enter time (UTC)", 32, false);    
+      updateDisplay("Enter time", 32, false);    
       char displayHour[3];
       char displayMinute[3];
 
