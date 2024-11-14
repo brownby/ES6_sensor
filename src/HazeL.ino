@@ -1426,10 +1426,7 @@ metaFileName = fileNameSeed + "_mata.csv";
       // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
       // #endif
       // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
-<<<<<<< Updated upstream
       #ifdef DEBUG_PRINT
-=======
->>>>>>> Stashed changes
       Serial.print("ms,manual_timestamp,temperature,PM2.5");
       #endif
       newFile.print("ms,manual_timestamp,temperature,PM2.5\n");
