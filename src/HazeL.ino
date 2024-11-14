@@ -89,8 +89,8 @@ uint32_t fileCount = 0; // number of files on SD card
 char fileToUpload[30];
 bool timeSetOnce = false;
 
-// Replace with your network credentials
-const char* ssid     = "QosainPM12";
+// Replace with your network credential
+const char* ssid     = "QosainPM03";
 const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
@@ -110,8 +110,8 @@ double longitude;
 double altitude;
 
 time_t prevTimeStamp = 0;
-uint8_t manualMonth = 0;
-uint8_t manualDay = 0;
+uint8_t manualMonth = 1;
+uint8_t manualDay = 1;
 uint16_t manualYear = CUR_YEAR;
 uint8_t manualHour = 0;
 uint8_t manualMinute = 0;
@@ -1422,6 +1422,14 @@ metaFileName = fileNameSeed + "_mata.csv";
       Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
       #endif
       newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
+
+      // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
+      // #endif
+      // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
+      #ifdef DEBUG_PRINT
+      Serial.print("ms,manual_timestamp,temperature,PM2.5");
+      #endif
+      newFile.print("ms,manual_timestamp,temperature,PM2.5\n");
     }
     else 
     {
