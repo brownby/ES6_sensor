@@ -110,11 +110,16 @@ double longitude;
 double altitude;
 
 time_t prevTimeStamp = 0;
+<<<<<<< Updated upstream
 uint8_t manualMonth = 1;
 uint8_t manualDay = 1;
+=======
+uint8_t manualMonth = 11;
+uint8_t manualDay = 17;
+>>>>>>> Stashed changes
 uint16_t manualYear = CUR_YEAR;
-uint8_t manualHour = 0;
-uint8_t manualMinute = 0;
+uint8_t manualHour = 17;
+uint8_t manualMinute = 22;
 int manualsecond = 0;
 bool manualTimeEntry = false; // false means use GPS
 bool rtcSet = false; // flag to indicate if RTC is set or not
@@ -268,6 +273,7 @@ void setup() {
   // server.on("/index", HTTP_GET, handleIndex);           // Serve index.html route
   server.on("/latest", HTTP_GET, handleLatestData);     // Handle latest file data route
   server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
+  server.on("/plot", HTTP_GET, handlePlot);   // Route for fetching the plot data
 
 
   server.begin();
@@ -693,7 +699,11 @@ void encLeftButtonISR()
 void handleRoot() {
   String html = "<html><body><h1>SD Card Web Server</h1>";
   html += "<a href='/list'>List Files</a><br>";
+<<<<<<< Updated upstream
   html += "<a href='/real-time-graph'>Real-Time Graph</a><br>";
+=======
+  html += "<a href='/plot'>Plot PM2.5 Data</a><br>";
+>>>>>>> Stashed changes
   html += "</body></html>";
   server.send(200, "text/html", html);
 }
@@ -706,6 +716,27 @@ void handleIndex() {
   } else {
     server.send(404, "text/plain", "404: Not Found");
   }
+}
+// Function to find the most recently modified file
+String getActiveFileName() {
+  File root = SD.open("/");
+  String activeFileName = "";
+  uint32_t latestModifiedTime = 0;
+
+  while (File file = root.openNextFile()) {
+    if (file.isDirectory()) continue;
+
+    String fileName = file.name();
+    uint32_t modifiedTime = file.getLastWrite(); // Get the file's last write time
+
+    if (fileName.endsWith(".txt") && modifiedTime > latestModifiedTime) {
+      latestModifiedTime = modifiedTime;
+      activeFileName = fileName;
+    }
+    file.close();
+  }
+
+  return activeFileName;
 }
 
 void handleLatestData() {
@@ -731,6 +762,65 @@ void handleLatestData() {
   }
 }
 
+// Function to check if the string is a valid number
+bool isNumber(const String &str) {
+  for (unsigned int i = 0; i < str.length(); i++) {
+    if (!isdigit(str[i]) && str[i] != '.') {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Function to handle plotting the data
+void handlePlot() {
+  String activeFileName = getActiveFileName();
+  if (activeFileName == "") {
+    server.send(404, "text/plain", "No active file found");
+    return;
+  }
+
+  File file = SD.open("/" + activeFileName, FILE_READ);
+  if (!file) {
+    server.send(404, "text/plain", "Could not open active file");
+    return;
+  }
+
+  // Prepare to send timestamp and PM2.5 data
+  String output = "[";
+  while (file.available()) {
+    String line = file.readStringUntil('\n'); // Read the line
+    line.trim(); // Trim any leading or trailing whitespace
+
+    if (line != "") {
+      int timestampPos = line.indexOf('T'); // Find the position of 'T'
+      if (timestampPos != -1) {
+        String timestamp = line.substring(timestampPos + 1, timestampPos + 7); // Extract time part
+        int pm25Pos = line.indexOf("PM2.5");
+        if (pm25Pos != -1) {
+          String pm25Value = line.substring(pm25Pos + 5, line.indexOf("\t", pm25Pos + 5)); // Extract PM2.5 value
+          
+          // Ensure that the data is numeric before including it
+          if (isNumber(pm25Value)) {
+            output += "{\"timestamp\":\"" + timestamp + "\",\"PM25\":" + pm25Value + "},";
+          }
+        }
+      }
+    }
+  }
+  
+  output.trim();
+  
+  // Remove trailing comma if it exists
+  if (output.endsWith(",")) {
+    output.remove(output.length() - 1);
+  }
+  
+  output += "]";
+  file.close();
+  
+  server.send(200, "application/json", output);  // Send the data in JSON format
+}
 
 // // Handle file listing
 // void handleFileList() {

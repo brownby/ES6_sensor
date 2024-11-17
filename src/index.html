@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
+<<<<<<< Updated upstream
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Real-Time PM2.5 Plot</title>
@@ -95,6 +96,62 @@
 
     // Update data every 2 seconds
     setInterval(fetchData, 2000);
+=======
+  <title>Plot PM2.5 Data</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>PM2.5 vs Time</h1>
+  <canvas id="pm25Chart" width="400" height="200"></canvas>
+  
+  <script>
+    // Fetch the data from the ESP32 web server
+    fetch('/plot')
+      .then(response => response.json())
+      .then(data => {
+        let timestamps = [];
+        let pm25Values = [];
+        
+        // Process the JSON data to extract the timestamps and PM2.5 values
+        data.forEach(item => {
+          timestamps.push(item.timestamp);
+          pm25Values.push(item.PM25);
+        });
+
+        // Plot the graph using Chart.js
+        var ctx = document.getElementById('pm25Chart').getContext('2d');
+        var chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: timestamps, // X-axis: timestamps
+            datasets: [{
+              label: 'PM2.5',
+              data: pm25Values, // Y-axis: PM2.5 values
+              borderColor: 'rgba(75, 192, 192, 1)',
+              fill: false
+            }]
+          },
+          options: {
+            scales: {
+              x: {
+                type: 'category',
+                title: {
+                  display: true,
+                  text: 'Time (HH:MM:SS)'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'PM2.5 (µg/m³)'
+                }
+              }
+            }
+          }
+        });
+      })
+      .catch(error => console.error('Error fetching data:', error));
+>>>>>>> Stashed changes
   </script>
 </body>
 </html>
