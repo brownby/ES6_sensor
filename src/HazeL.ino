@@ -269,6 +269,7 @@ void setup() {
   server.on("/latest", HTTP_GET, handleLatestData);     // Handle latest file data route
   server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
 
+
   server.begin();
   Serial.println("Server started");
 
@@ -670,32 +671,6 @@ uint16_t RGBtoRGB565(byte r, byte g, byte b) {
     return rgb565;
 }
 
-String getLatestFileName() {
-  File root = SD.open("/");  // Open the root directory
-  String latestFileName = "";
-  uint32_t latestDateTime = 0;
-
-  while (File file = root.openNextFile()) {
-    String fileName = file.name();  // Get the name of the current file
-    file.close();
-
-    // Check if the file ends with ".txt_data" and has the proper length (to avoid incomplete files)
-    if (fileName.endsWith(".txt_data") && fileName.length() >= 21) {
-      String datePart = fileName.substring(0, 8);   // Extract YYYYMMDD
-      String timePart = fileName.substring(9, 15);  // Extract HHMMSS
-
-      uint32_t dateTimeValue = datePart.toInt() * 1000000 + timePart.toInt();  // Combine date and time into a single number for comparison
-
-      if (dateTimeValue > latestDateTime) {
-        latestDateTime = dateTimeValue;
-        latestFileName = fileName;
-      }
-    }
-  }
-  return latestFileName;
-}
-
-
 // ISR for button being pressed
 void encRightButtonISR()
 {
@@ -714,11 +689,11 @@ void encLeftButtonISR()
     encLeftButtonISREn = false;
   }
 }
-
 // Handle root page
 void handleRoot() {
   String html = "<html><body><h1>SD Card Web Server</h1>";
   html += "<a href='/list'>List Files</a><br>";
+  html += "<a href='/real-time-graph'>Real-Time Graph</a><br>";
   html += "</body></html>";
   server.send(200, "text/html", html);
 }

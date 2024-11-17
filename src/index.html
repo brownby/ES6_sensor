@@ -1,107 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time Sensor Data</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <style>
-        #graph {
-            width: 90%;
-            margin: auto;
-            height: 500px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time PM2.5 Plot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    canvas {
+      max-width: 800px;
+      margin: 20px auto;
+    }
+  </style>
 </head>
 <body>
-    <h1>Real-Time Sensor Data</h1>
-    <div id="graph"></div>
+  <h1>Real-Time PM2.5 Plot</h1>
+  <canvas id="dataChart"></canvas>
+  <p>Loading data...</p>
+  
+  <script>
+    // Get the canvas element
+    const ctx = document.getElementById('dataChart').getContext('2d');
 
-    <script>
-        let utcTimestamps = [];
-        let pm25Data = [];
-        let temperatureData = [];
-
-        async function fetchData() {
-            try {
-                const response = await fetch("http://192.168.4.1/latest");  // Fetch latest data from the server
-                const textData = await response.text();
-
-                // Assuming the file content is in CSV format
-                const lines = textData.trim().split("\n");
-                const latestLine = lines[lines.length - 1];  // Get the last line
-                const fields = latestLine.split(",");  // Split by comma
-
-                const utcTimestamp = fields[1];  // Assuming UTC timestamp is the second column
-                const pm25 = parseFloat(fields[8]);  // Assuming PM2.5 is the 9th column
-                const temperature = parseFloat(fields[5]);  // Assuming temperature is the 6th column
-
-                const timePart = utcTimestamp.split("T")[1];  // Get the time part of the timestamp
-
-                utcTimestamps.push(timePart);
-                pm25Data.push(pm25);
-                temperatureData.push(temperature);
-
-                // Keep the latest 50 data points for smooth plotting
-                if (utcTimestamps.length > 50) {
-                    utcTimestamps.shift();
-                    pm25Data.shift();
-                    temperatureData.shift();
-                }
-
-                updatePlot();  // Update the plot with the new data
-            } catch (error) {
-                console.error("Error fetching data:", error);
+    // Initialize the chart
+    const dataChart = new Chart(ctx, {
+      type: 'line', // Line chart
+      data: {
+        labels: [], // Timestamps (extracted from UTC_timestamp)
+        datasets: [
+          {
+            label: 'PM2.5 (µg/m³)', // Y-axis label
+            data: [],
+            borderColor: 'blue',
+            backgroundColor: 'rgba(0, 0, 255, 0.1)',
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Time (HH:MM:SS)'
             }
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'PM2.5 (µg/m³)'
+            }
+          }
+        }
+      }
+    });
+
+    // Function to fetch and update data from ESP32
+    async function fetchData() {
+      try {
+        const response = await fetch('/latest'); // Fetch the latest file data
+        if (!response.ok) {
+          console.error('Failed to fetch data:', response.status);
+          return;
         }
 
-        function updatePlot() {
-            const tracePM25 = {
-                x: utcTimestamps,
-                y: pm25Data,
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: 'PM2.5',
-                marker: { color: 'blue' },
-                yaxis: 'y1'
-            };
+        const textData = await response.text(); // Read the data as text
+        const rows = textData.split('\n').filter(row => row.trim() !== ''); // Split by new lines and remove empty rows
 
-            const traceTemperature = {
-                x: utcTimestamps,
-                y: temperatureData,
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: 'Temperature',
-                marker: { color: 'red' },
-                yaxis: 'y2'
-            };
+        rows.forEach((row, index) => {
+          if (index === 0) return; // Skip header
+          const columns = row.split('\t'); // Data is tab-separated
+          const utcTimestamp = columns[1]; // Second column is UTC_timestamp
+          const pm25 = parseFloat(columns[8]); // Ninth column is PM2.5
 
-            const layout = {
-                title: 'Real-Time Sensor Data',
-                xaxis: {
-                    title: 'UTC Time',
-                    type: 'category'  // Ensures time values are treated as categories
-                },
-                yaxis: {
-                    title: 'PM2.5 (µg/m³)',
-                    titlefont: { color: 'blue' },
-                    tickfont: { color: 'blue' }
-                },
-                yaxis2: {
-                    title: 'Temperature (°C)',
-                    titlefont: { color: 'red' },
-                    tickfont: { color: 'red' },
-                    overlaying: 'y',
-                    side: 'right'
-                },
-                showlegend: true
-            };
+          // Extract time from UTC_timestamp (after T)
+          const time = utcTimestamp.split('T')[1];
 
-            Plotly.newPlot('graph', [tracePM25, traceTemperature], layout);
-        }
+          // Update chart labels and datasets
+          if (!dataChart.data.labels.includes(time)) {
+            dataChart.data.labels.push(time);
+            dataChart.data.datasets[0].data.push(pm25);
+            dataChart.update(); // Re-render the chart
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    }
 
-        setInterval(fetchData, 30000);  // Fetch data every 30 seconds
-        fetchData();  // Initial fetch when the page loads
-    </script>
+    // Update data every 2 seconds
+    setInterval(fetchData, 2000);
+  </script>
 </body>
 </html>
