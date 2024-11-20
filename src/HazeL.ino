@@ -6,7 +6,7 @@
 #include <SPI.h>
 #include <Wire.h>
 //#include "HM3301.h"
-
+#include <ArduinoJson.h>
 // Make sure you have these five libraries installed in Documents/Arduino/libraries
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_GFX.h>
@@ -89,8 +89,13 @@ uint32_t fileCount = 0; // number of files on SD card
 char fileToUpload[30];
 bool timeSetOnce = false;
 
+<<<<<<< Updated upstream
 // Replace with your network credential
 const char* ssid     = "QosainPM03";
+=======
+// Replace with your network credentials
+const char* ssid     = "Qosain";
+>>>>>>> Stashed changes
 const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
@@ -261,20 +266,37 @@ void setup() {
   delay(2500);
 
   // Initialize WiFi
-  WiFi.softAP(ssid, password);
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("Access Point IP address: ");
-  Serial.println(IP);
+  // WiFi.softAP(ssid, password);
+  // IPAddress IP = WiFi.softAPIP();
+  // Serial.print("Access Point IP address: ");
+  // Serial.println(IP);
+
+    // Connecting to Wi-Fi
+  Serial.println("Connecting to WiFi...");
+
+  WiFi.begin(ssid, password);  // Start the Wi-Fi connection
+  
+  // Wait until the ESP32 is connected to the Wi-Fi network
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
 
   // Initialize web server
   server.on("/", HTTP_GET, handleRoot);                // Handle root route
   server.on("/list", HTTP_GET, handleFileList);         // Handle file list route
   server.on("/download", HTTP_GET, handleFileDownload); // Handle file download route
   // server.on("/index", HTTP_GET, handleIndex);           // Serve index.html route
-  server.on("/latest", HTTP_GET, handleLatestData);     // Handle latest file data route
+  // server.on("/latest", HTTP_GET, handleLatestData);     // Handle latest file data route
   server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
+<<<<<<< Updated upstream
   server.on("/plot", HTTP_GET, handlePlot);   // Route for fetching the plot data
 
+=======
+  server.on("/plot", HTTP_GET, handleDataRequest);      // Handle plotting route
+  // server.on("/plot", HTTP_GET, handlePlotRequest);
+  server.on("/view", handleViewFile);
+>>>>>>> Stashed changes
 
   server.begin();
   Serial.println("Server started");
@@ -287,18 +309,6 @@ void setup() {
   //PM_SERIAL.begin(9600);
   pms.init();
 
-  // Initialize dust sensor
- // if(!dustSensor.begin())
- 
-  // {
-  //   #ifdef DEBUG_PRINT
-  //   Serial.println("Failed to initialize dust sensor");
-  //   #endif
-  //   display.clearDisplay(LCD_BACKGROUND);
-  //   updateDisplay("Dust sensor init failed", 32, false);
-  //   updateDisplay("Reset device", 48, false);
-  //   display.display();
-  // }
   TPSensor.init();
 
   // Put GPS to sleep to start
@@ -307,21 +317,11 @@ void setup() {
     toggleGps();
   }
 
-  // Begin RTC
-  //For RTC Library
-  //rtc.begin(); 
-  //FOr ESP32TIme Library
   rtc.setTime(0, 0, 0, 1, 1, 2024);  // Set a default time (HH, MM, SS, DD, MM, YYYY)
-
 
   encLeft.begin();
   encRight.begin();
   encoderRotary.attach_ms(10, encoderISR); // Call encoderISR() every 10 ms
-  //encRight.attach_ms(15, encRightButtonISR); // Call encoderButtonISR() every 15 ms
-  //encRight.begin();
-  //encoderRotary.attach_ms(10, encoderISR); // Call encoderISR() every 10 ms
-  //encLeft.attach_ms(15, encLeftButtonISR); // Call encoderButtonISR() every 15 ms
-
 
   // Attach ISR for flipping buttonFlag when button is pressed
   attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
@@ -708,6 +708,7 @@ void handleRoot() {
   server.send(200, "text/html", html);
 }
 
+<<<<<<< Updated upstream
 void handleIndex() {
   File file = SD.open("/index.html");
   if (file) {
@@ -887,6 +888,8 @@ void handlePlot() {
 //   }
 // }
 
+=======
+>>>>>>> Stashed changes
 void handleFileDownload() {
   if (server.hasArg("file")) {
     String path = "/" + server.arg("file");
@@ -931,16 +934,24 @@ void handleFileDelete() {
   }
 }
 
-// Function to display the list of files with delete and download options
 void handleFileList() {
   String html = "<html><body><h1>Available Files</h1><ul>";
   
   File dir = SD.open("/");
   while (File entry = dir.openNextFile()) {
     String filename = entry.name();
-    html += "<li>" + filename + " ";
-    html += "<a href='/download?file=" + filename + "'>Download</a> ";
-    html += "<a href='/delete?file=" + filename + "'>Delete</a>";
+    html += "<li>";
+
+    // Make the file name a clickable link to view the file in the browser
+    if (filename.endsWith(".csv")) {
+      html += "<a href='/view?file=" + filename + "'>" + filename + "</a>";
+      html += " <a href='/download?file=" + filename + "'>Download</a>";
+      html += " <a href='/delete?file=" + filename + "'>Delete</a>";
+      html += " <a href='/plot?file=" + filename + "'>Plot</a>";
+    } else {
+      html += filename;
+    }
+    
     html += "</li>";
   }
   html += "</ul></body></html>";
@@ -948,25 +959,281 @@ void handleFileList() {
   server.send(200, "text/html", html);
 }
 
-// function to delete files
-// void handleFileDelete() {
-//   if (server.hasArg("file")) {
-//     String path = "/" + server.arg("file");
-    
-//     if (SD.exists(path)) {
-//       if (SD.remove(path)) {
-//         server.send(200, "text/plain", "File deleted successfully");
-//       } else {
-//         server.send(500, "text/plain", "Failed to delete file");
-//       }
-//     } else {
-//       server.send(404, "text/plain", "File not found");
-//     }
-//   } else {
-//     server.send(400, "text/plain", "No file specified");
-//   }
-// }
+// Function to handle viewing .csv files
+void handleViewFile() {
+  String filename = server.arg("file");
+  
+  // Open the file from the SD card
+  File file = SD.open("/" + filename);
+  if (!file) {
+    server.send(404, "text/plain", "File not found");
+    return;
+  }
+  
+  // Set content type to plain text for .csv files
+  server.streamFile(file, "text/plain");
+  file.close();
+}
 
+String extractTime(String timestamp) {
+  // Find the position of 'T' and '+'
+  int tIndex = timestamp.indexOf('T');
+  int plusIndex = timestamp.indexOf('+');
+
+  // Check if both 'T' and '+' exist in the timestamp
+  if (tIndex != -1 && plusIndex != -1) {
+    // Extract the substring between 'T' and '+'
+    String time = timestamp.substring(tIndex + 1, plusIndex);
+    return time;
+  }
+
+  // Return the original timestamp if no 'T' or '+' are found
+  return "";
+}
+
+void handleDataRequest() {
+  // Ensure 'file' parameter is provided
+  if (!server.hasArg("file")) {
+    server.send(400, "text/plain", "Bad Request: 'file' parameter missing");
+    return;
+  }
+
+  String filename = server.arg("file");
+
+  // Open the requested file on the SD card
+  File file = SD.open("/" + filename);
+  if (!file) {
+    server.send(404, "text/plain", "File not found");
+    return;
+  }
+
+  // Variables to store column indexes
+  int timestampIndex = -1;
+  int pm25Index = -1;
+
+  // Prepare JSON response for plotting data
+  DynamicJsonDocument jsonDoc(2048);
+  JsonArray timestamps = jsonDoc.createNestedArray("UTC_timestamp");
+  JsonArray pm25Values = jsonDoc.createNestedArray("PM2.5");
+
+  // Read the header to determine column indexes
+  if (file.available()) {
+    String header = file.readStringUntil('\n');
+    header.trim(); // Clean the header line
+
+    // Split the header by commas
+    int columnIndex = 0;
+    int prevIndex = 0;
+    for (int i = 0; i <= header.length(); i++) {
+      if (header[i] == ',' || i == header.length()) {
+        // Extract column name
+        String columnName = header.substring(prevIndex, i);
+        columnName.trim(); // Clean the column name
+
+        // Identify the required columns
+        if (columnName == "UTC_timestamp") {
+          timestampIndex = columnIndex;
+        } else if (columnName == "PM2.5") {
+          pm25Index = columnIndex;
+        }
+        prevIndex = i + 1;
+        columnIndex++;
+      }
+    }
+  }
+
+  // Validate that both required columns were found
+  if (timestampIndex == -1 || pm25Index == -1) {
+    server.send(500, "text/plain", "Error: Required columns not found in file");
+    file.close();
+    return;
+  }
+
+  // Read the file line by line
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim(); // Remove any leading or trailing whitespace
+
+    // Skip empty lines
+    if (line == "") {
+      continue;
+    }
+
+    // Split the line by commas
+    int columnIndex = 0;
+    int prevIndex = 0;
+    String timestamp = "";
+    String pm25 = "";
+    for (int i = 0; i <= line.length(); i++) {
+      if (line[i] == ',' || i == line.length()) {
+        // Extract value
+        String value = line.substring(prevIndex, i);
+        value.trim(); // Clean the value
+
+        // Assign to the respective variable
+        if (columnIndex == timestampIndex) {
+          timestamp = value;
+        } else if (columnIndex == pm25Index) {
+          pm25 = value;
+        }
+        prevIndex = i + 1;
+        columnIndex++;
+      }
+    }
+
+    // Extract time from UTC_timestamp
+    if (timestamp != "") {
+      String time = extractTime(timestamp);
+      timestamps.add(time); // Add the extracted time
+    }
+
+    // Add PM2.5 values to JSON array
+    if (pm25 != "") {
+      pm25Values.add(pm25.toFloat());
+    }
+  }
+  file.close();
+
+  // Convert JSON document to string
+  String jsonResponse;
+  serializeJson(jsonDoc, jsonResponse);
+
+  // Send HTML page with Plotly plot
+  String html = "<html><body>";
+  html += "<h1>Data Plot</h1>";
+  html += "<div id='plot'></div>";
+  html += "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>";
+  html += "<script>";
+  html += "let data = " + jsonResponse + ";";  // Insert JSON response here
+  html += "let trace = {";
+  html += "  x: data.UTC_timestamp,";
+  html += "  y: data['PM2.5'],";
+  html += "  type: 'scatter',";
+  html += "  mode: 'lines+markers',";
+  html += "  name: 'PM2.5'";
+  html += "};";
+  html += "let layout = {";
+  html += "  title: 'PM2.5 Over Time',";
+  html += "  xaxis: { title: 'Time' },";
+  html += "  yaxis: { title: 'PM2.5 (µg/m³)' }";
+  html += "};";
+  html += "Plotly.newPlot('plot', [trace], layout);";  // Render the plot in the div
+  html += "</script>";
+  html += "</body></html>";
+
+  // Send HTML response
+  server.send(200, "text/html", html);
+}
+
+
+// void handleDataRequest() {
+//   // Ensure 'file' parameter is provided
+//   if (!server.hasArg("file")) {
+//     server.send(400, "text/plain", "Bad Request: 'file' parameter missing");
+//     return;
+//   }
+
+//   String filename = server.arg("file");
+
+//   // Open the requested file on the SD card
+//   File file = SD.open("/" + filename);
+//   if (!file) {
+//     server.send(404, "text/plain", "File not found");
+//     return;
+//   }
+
+//   // Variables to store column indexes
+//   int timestampIndex = -1;
+//   int pm25Index = -1;
+
+//   // Prepare JSON response for plotting data
+//   DynamicJsonDocument jsonDoc(2048);
+//   JsonArray timestamps = jsonDoc.createNestedArray("UTC_timestamp");
+//   JsonArray pm25Values = jsonDoc.createNestedArray("PM2.5");
+
+//   // Read the header to determine column indexes
+//   if (file.available()) {
+//     String header = file.readStringUntil('\n');
+//     header.trim(); // Clean the header line
+
+//     // Split the header by commas
+//     int columnIndex = 0;
+//     int prevIndex = 0;
+//     for (int i = 0; i <= header.length(); i++) {
+//       if (header[i] == ',' || i == header.length()) {
+//         // Extract column name
+//         String columnName = header.substring(prevIndex, i);
+//         columnName.trim(); // Clean the column name
+
+//         // Identify the required columns
+//         if (columnName == "UTC_timestamp") {
+//           timestampIndex = columnIndex;
+//         } else if (columnName == "PM2.5") {
+//           pm25Index = columnIndex;
+//         }
+//         prevIndex = i + 1;
+//         columnIndex++;
+//       }
+//     }
+//   }
+
+//   // Validate that both required columns were found
+//   if (timestampIndex == -1 || pm25Index == -1) {
+//     server.send(500, "text/plain", "Error: Required columns not found in file");
+//     file.close();
+//     return;
+//   }
+
+//   // Read the file line by line
+//   while (file.available()) {
+//     String line = file.readStringUntil('\n');
+//     line.trim(); // Remove any leading or trailing whitespace
+
+//     // Skip empty lines
+//     if (line == "") {
+//       continue;
+//     }
+
+//     // Split the line by commas
+//     int columnIndex = 0;
+//     int prevIndex = 0;
+//     String timestamp = "";
+//     String pm25 = "";
+//     for (int i = 0; i <= line.length(); i++) {
+//       if (line[i] == ',' || i == line.length()) {
+//         // Extract value
+//         String value = line.substring(prevIndex, i);
+//         value.trim(); // Clean the value
+
+//         // Assign to the respective variable
+//         if (columnIndex == timestampIndex) {
+//           timestamp = value;
+//         } else if (columnIndex == pm25Index) {
+//           pm25 = value;
+//         }
+//         prevIndex = i + 1;
+//         columnIndex++;
+//       }
+//     }
+
+//     // Extract time from UTC_timestamp
+//     if (timestamp != "") {
+//       String time = extractTime(timestamp);
+//       timestamps.add(time); // Add the extracted time
+//     }
+
+//     // Add PM2.5 values to JSON array
+//     if (pm25 != "") {
+//       pm25Values.add(pm25.toFloat());
+//     }
+//   }
+//   file.close();
+
+//   // Convert JSON document to string and send it as the response
+//   String response;
+//   serializeJson(jsonDoc, response);
+//   server.send(200, "application/json", response);
+// }
 // update samples in SD card
 void updateSampleSD() {
     bool timeoutFlag = false;
