@@ -273,11 +273,10 @@ void setup() {
   }
 
   // Initialize web server
+  server.serveStatic("/qosain.jpg", SD, "/qosain.jpg");  // Serve logo image from SD card
   server.on("/", HTTP_GET, handleRoot);                // Handle root route
   server.on("/list", HTTP_GET, handleFileList);         // Handle file list route
   server.on("/download", HTTP_GET, handleFileDownload); // Handle file download route
-  // server.on("/index", HTTP_GET, handleIndex);           // Serve index.html route
-  // server.on("/latest", HTTP_GET, handleLatestData);     // Handle latest file data route
   server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
   server.on("/plot", HTTP_GET, handleDataRequest);      // Handle plotting route
   server.on("/view", handleViewFile);
@@ -682,10 +681,25 @@ void encLeftButtonISR()
 }
 
 // Handle root page
+// void handleRoot() {
+//   String html = "<html><body><h1>SD Card Web Server</h1>";
+//   html += "<a href='/list'>List Files</a><br>";
+//   html += "</body></html>";
+//   server.send(200, "text/html", html);
+// }
+
 void handleRoot() {
-  String html = "<html><body><h1>SD Card Web Server</h1>";
+  String html = "<html><body>";
+
+  // Add the company logo at the top of the page
+  html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
+
+  // Add the rest of the content (unchanged)
+  html += "<h1>Qosain Scientific Web Server</h1>";
   html += "<a href='/list'>List Files</a><br>";
+  
   html += "</body></html>";
+  
   server.send(200, "text/html", html);
 }
 
@@ -734,7 +748,14 @@ void handleFileDelete() {
 }
 
 void handleFileList() {
-  String html = "<html><body><h1>Available Files</h1><ul>";
+
+  String html = "<html><body>";
+
+  // Add the company logo at the top of the page
+  html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
+
+  // Add the title and the list of available files
+  html += "<h1>Available Files</h1><ul>";
   
   File dir = SD.open("/");
   while (File entry = dir.openNextFile()) {
@@ -899,6 +920,8 @@ void handleDataRequest() {
 
   // Send HTML page with Plotly plot
   String html = "<html><body>";
+    // Add the company logo at the top of the page
+  html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
   html += "<h1>Data Plot</h1>";
   html += "<div id='plot'></div>";
   html += "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>";
