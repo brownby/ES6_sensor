@@ -90,11 +90,11 @@ char fileToUpload[30];
 bool timeSetOnce = false;
 
 // Replace with your network credentials
-// const char* ssid     = "Qosain";
-// const char* password = "12345678";
+// const char* ssid     = "TV-LED";
+// const char* password = "Lums@12345";
 
-const char* ssid     = "Wireless";
-const char* password = "Lums@12345";
+const char* ssid     = "Qosain";
+const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
 TinyGPSPlus gps;
@@ -187,141 +187,123 @@ void encoderISR()
 }
 
 void setup() {
-  // initialize Serial port
+  // Initialize Serial port
   Serial.begin(115200);
-  //                 rrrrrggggggbbbbb
+
+  // LCD Initialization
   LCD_FOREGROUND = 0b0000001011100000;
   LCD_BACKGROUND = 0b1111111111111111;
-  // intialize comms with GPS module
-  // Controller Rx -> 14, Tx -> 26
-  Serial1.begin(9600, SERIAL_8N1, 26, 14);
+  Serial1.begin(9600, SERIAL_8N1, 26, 14); // GPS Serial
+  Wire.begin(32, 27); // I2C Initialization
 
-  // Initialize I2C bus
-  Wire.begin(32, 27); // SDA on GPIO32, SCL on GPIO27
-  // Initialize comms with OLED display
+  // Initialize Display
   DisplaySetup();
-  display.setRotation(2);   //2
+  display.setRotation(2);
   setLCDBacklight(255);
-  for (int i =0; i < 200; i++)
-    DisplayLoop();
-
   display.clearDisplay(LCD_BACKGROUND);
-  // display.setTextSize(3);
-  // updateDisplay("Qosain Scientific", 70, false);
-  // delay(2000);
   display.setTextSize(1);
   updateDisplay("Initializing...", 40, false);
   display.display();
   delay(2500);
-  #ifdef DEBUG_PRINT
-  Serial.println("Initializing...");
-  #endif
 
-  // Set relevant pin modes
+  // Initialize Pins
   pinMode(LED_BUILTIN, OUTPUT);
-  //pinMode(SD_CS_PIN, OUTPUT);
   pinMode(ENC_RIGHT_BUTTON, INPUT_PULLUP);
   pinMode(ENC_LEFT_BUTTON, INPUT_PULLUP);
 
-  #ifdef DEBUG_PRINT
-  Serial.println("Initialize SD");
-  #endif
+  // SD Card Initialization
+  initializeSDCard();
+
+  // Wi-Fi Initialization
+  WiFi.begin(ssid, password);
+  waitForWiFiConnection(); // Blocking connection during setup
+
+  // Web Server Initialization
+  initializeWebServer();
+
+  // PM Sensor and GPS Initialization
+  initializePMSensorAndGPS();
+
+  // RTC Initialization
+  rtc.setTime(0, 0, 0, 1, 1, 2024); // Default time
+
+  // Encoder Initialization
+  encLeft.begin();
+  encRight.begin();
+  encoderRotary.attach_ms(10, encoderISR);
+  attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENC_LEFT_BUTTON), encLeftButtonISR, FALLING);
+  encRightButtonISREn = true;
+  encLeftButtonISREn = true;
+
+  // Set Initial State
+  state = 0;
+}
+
+void initializeSDCard() {
   display.clearDisplay(LCD_BACKGROUND);
   updateDisplay("Checking SD", 40, false);
   display.display();
   delay(2500);
 
-    // Initialize custom SPI bus
   customSPI.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS_PIN);
-  // Initialize SD card communication
-  //if(!SD.begin(SD_CS_PIN))
-  //if(!SD.begin(true))
-  if (!SD.begin(SD_CS_PIN, customSPI, 4000000))
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Card failed");
-    #endif
+  if (!SD.begin(SD_CS_PIN, customSPI, 4000000)) {
     display.clearDisplay(LCD_BACKGROUND);
     updateDisplay("SD card failed", 32, false);
     updateDisplay("Reset device", 48, false);
     display.display();
-    while(true);
-  }
-  else
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Card initialized successfully");
-    #endif
+    while (true); // Halt if SD card fails
+  } else {
     display.clearDisplay(LCD_BACKGROUND);
     updateDisplay("SD card detected", 40, false);
     display.display();
   }
   delay(2500);
+}
 
-  // Initialize WiFi
-  // WiFi.softAP(ssid, password);
-  // IPAddress IP = WiFi.softAPIP();
-  // Serial.print("Access Point IP address: ");
-  // Serial.println(IP);
-
-    // Connecting to Wi-Fi
+void waitForWiFiConnection() {
   Serial.println("Connecting to WiFi...");
+  unsigned long startAttemptTime = millis();
+  const unsigned long timeout = 10000; // 10 seconds
 
-  WiFi.begin(ssid, password);  // Start the Wi-Fi connection
-  
-  // Wait until the ESP32 is connected to the Wi-Fi network
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < timeout) {
+    delay(500);
     Serial.print(".");
   }
 
-  // Initialize web server
-  server.serveStatic("/qosain.jpg", SD, "/qosain.jpg");  // Serve logo image from SD card
-  server.on("/", HTTP_GET, handleRoot);                // Handle root route
-  server.on("/list", HTTP_GET, handleFileList);         // Handle file list route
-  server.on("/api/fileList", HTTP_GET, handleFileListAPI);         // Handle file list route
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nWiFi connection failed. Continuing without connection.");
+  }
+}
+
+void initializeWebServer() {
+  server.serveStatic("/qosain.jpg", SD, "/qosain.jpg");
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/list", HTTP_GET, handleFileList);
+  server.on("/api/fileList", HTTP_GET, handleFileListAPI);
   server.on("/view", handleViewFile);
-  server.on("/download", HTTP_GET, handleFileDownload); // Handle file download route
-  server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
-  server.on("/plot", HTTP_GET, handleDataRequest);      // Handle plotting route
-  server.on("/api/plotData", HTTP_GET, handlePlotData); // New endpoint for serving JSON data for plots
-
-
+  server.on("/download", HTTP_GET, handleFileDownload);
+  server.on("/delete", HTTP_GET, handleFileDelete);
+  server.on("/plot", HTTP_GET, handleDataRequest);
+  server.on("/api/plotData", HTTP_GET, handlePlotData);
   server.begin();
   Serial.println("Server started");
+}
 
+void initializePMSensorAndGPS() {
   pinMode(PM_SET_PIN, OUTPUT);
-  // pinMode(PM_RESET_PIN, OUTPUT);
-  digitalWrite(PM_SET_PIN, HIGH); 
-  // digitalWrite(PM_RESET_PIN, LOW);
-  PM_SERIAL.begin(9600,SERIAL_8N1, 17, 16);
-  //PM_SERIAL.begin(9600);
+  digitalWrite(PM_SET_PIN, HIGH);
+  PM_SERIAL.begin(9600, SERIAL_8N1, 17, 16);
   pms.init();
-
   TPSensor.init();
 
-  // Put GPS to sleep to start
-  if(gpsAwake)
-  {
+  if (gpsAwake) {
     toggleGps();
   }
-
-  rtc.setTime(0, 0, 0, 1, 1, 2024);  // Set a default time (HH, MM, SS, DD, MM, YYYY)
-
-  encLeft.begin();
-  encRight.begin();
-  encoderRotary.attach_ms(10, encoderISR); // Call encoderISR() every 10 ms
-
-  // Attach ISR for flipping buttonFlag when button is pressed
-  attachInterrupt(digitalPinToInterrupt(ENC_RIGHT_BUTTON), encRightButtonISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENC_LEFT_BUTTON), encLeftButtonISR, FALLING);
-
-  // enable button ISR
-  encRightButtonISREn = true;
-  encLeftButtonISREn = true;
-
-  // set initial state to menu navigation
-  state = 0;
 }
 
 void loop() {
@@ -329,6 +311,16 @@ void loop() {
   // check number of milliseconds since Arduino was turned on
   curMillis = millis();
 
+  static unsigned long lastWiFiCheck = 0;
+  const unsigned long wifiCheckInterval = 10000; // Check Wi-Fi every 10 seconds
+
+  // Wi-Fi Reconnection Logic
+  if (millis() - lastWiFiCheck >= wifiCheckInterval) {
+    lastWiFiCheck = millis();
+    reconnectWiFi();
+  }
+
+  // Handle Web Server Requests
   server.handleClient();
 
   // display the current page
@@ -654,6 +646,29 @@ void loop() {
 
 }
 
+void reconnectWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi disconnected. Attempting reconnection...");
+    WiFi.begin(ssid, password);
+
+    unsigned long reconnectStart = millis();
+    const unsigned long reconnectTimeout = 5000;
+
+    while (WiFi.status() != WL_CONNECTED && millis() - reconnectStart < reconnectTimeout) {
+      delay(500);
+      Serial.print(".");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nWiFi reconnected!");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+    } else {
+      Serial.println("\nReconnection failed.");
+    }
+  }
+}
+
 // Function to convert RGB to RGB565
 uint16_t RGBtoRGB565(byte r, byte g, byte b) {
     // Scale the 8-bit values to the 5, 6, and 5 bits needed for RGB565
@@ -685,14 +700,6 @@ void encLeftButtonISR()
     encLeftButtonISREn = false;
   }
 }
-
-// Handle root page
-// void handleRoot() {
-//   String html = "<html><body><h1>SD Card Web Server</h1>";
-//   html += "<a href='/list'>List Files</a><br>";
-//   html += "</body></html>";
-//   server.send(200, "text/html", html);
-// }
 
 void handleRoot() {
   String html = "<html><body>";
@@ -787,16 +794,14 @@ void handleFileList() {
   html += "  let fileList = document.getElementById('fileList');";
   html += "  fileList.innerHTML = '';"; // Clear current list";
   html += "  data.files.forEach(file => {";
-  html += "    let listItem = document.createElement('li');";
-  html += "    if (file.endsWith('.csv')) {";
+  html += "    if (file.endsWith('.csv')) {"; // Only process .csv files
+  html += "      let listItem = document.createElement('li');";
   html += "      listItem.innerHTML = `<a href='/view?file=${file}'>${file}</a> ` +";
   html += "                          `<a href='/download?file=${file}'>Download</a> ` +";
   html += "                          `<a href='/delete?file=${file}'>Delete</a> ` +";
   html += "                          `<a href='/plot?file=${file}'>Plot</a>`;";
-  html += "    } else {";
-  html += "      listItem.textContent = file;";
+  html += "      fileList.appendChild(listItem);";
   html += "    }";
-  html += "    fileList.appendChild(listItem);";
   html += "  });";
   html += "}";
   html += "fetchFileList();";  // Fetch files when the page loads
@@ -823,22 +828,6 @@ void handleViewFile() {
   file.close();
 }
 
-String extractTime(String timestamp) {
-  // Find the position of 'T' and '+'
-  int tIndex = timestamp.indexOf('T');
-  int plusIndex = timestamp.indexOf('+');
-
-  // Check if both 'T' and '+' exist in the timestamp
-  if (tIndex != -1 && plusIndex != -1) {
-    // Extract the substring between 'T' and '+'
-    String time = timestamp.substring(tIndex + 1, plusIndex);
-    return time;
-  }
-
-  // Return the original timestamp if no 'T' or '+' are found
-  return "";
-}
-
 void handlePlotData() {
   if (!server.hasArg("file")) {
     server.send(400, "text/plain", "Bad Request: 'file' parameter missing");
@@ -854,12 +843,15 @@ void handlePlotData() {
 
   // Create JSON document
   DynamicJsonDocument jsonDoc(2048);
+  JsonArray dates = jsonDoc.createNestedArray("date"); // New array for dates
   JsonArray timestamps = jsonDoc.createNestedArray("UTC_timestamp");
   JsonArray pm25Values = jsonDoc.createNestedArray("PM2.5");
+  JsonArray temperatureValues = jsonDoc.createNestedArray("Temperature");
 
   // Variables to store column indexes
   int timestampIndex = -1;
   int pm25Index = -1;
+  int temperatureIndex = -1; // New variable for temperature column
 
   // Read header to determine column indexes
   if (file.available()) {
@@ -878,6 +870,8 @@ void handlePlotData() {
           timestampIndex = columnIndex;
         } else if (columnName == "PM2.5") {
           pm25Index = columnIndex;
+        } else if (columnName == "temperature") { // Check for the "temperature" column
+          temperatureIndex = columnIndex;
         }
 
         prevIndex = i + 1;
@@ -887,7 +881,7 @@ void handlePlotData() {
   }
 
   // Validate that required columns were found
-  if (timestampIndex == -1 || pm25Index == -1) {
+  if (timestampIndex == -1 || pm25Index == -1 || temperatureIndex == -1) {
     server.send(500, "text/plain", "Error: Required columns not found in file");
     file.close();
     return;
@@ -907,6 +901,7 @@ void handlePlotData() {
     int prevIndex = 0;
     String timestamp = "";
     String pm25 = "";
+    String temperature = ""; // New variable for temperature value
 
     // Parse the line
     for (int i = 0; i <= line.length(); i++) {
@@ -918,6 +913,8 @@ void handlePlotData() {
           timestamp = value;
         } else if (columnIndex == pm25Index) {
           pm25 = value;
+        } else if (columnIndex == temperatureIndex) { // Read temperature value
+          temperature = value;
         }
 
         prevIndex = i + 1;
@@ -925,15 +922,24 @@ void handlePlotData() {
       }
     }
 
-    // Extract time and add to JSON array
+    // Extract date and time and add to JSON arrays
     if (timestamp != "") {
-      String time = extractTime(timestamp);
-      timestamps.add(time);
+      String date = extractDate(timestamp); // Extract the date
+      String time = extractTime(timestamp); // Extract the time
+      if (date != "") {
+        dates.add(date);
+      }
+      if (time != "") {
+        timestamps.add(time);
+      }
     }
 
-    // Add PM2.5 value to JSON array
+    // Add PM2.5 and temperature values to JSON arrays
     if (pm25 != "") {
       pm25Values.add(pm25.toFloat());
+    }
+    if (temperature != "") {
+      temperatureValues.add(temperature.toFloat());
     }
   }
 
@@ -947,18 +953,103 @@ void handlePlotData() {
   server.send(200, "application/json", jsonResponse);
 }
 
+// Extract the date (portion before 'T') from the timestamp
+String extractDate(String timestamp) {
+  int tIndex = timestamp.indexOf('T'); // Find 'T' position
+  if (tIndex != -1) {
+    return timestamp.substring(0, tIndex); // Extract everything before 'T'
+  }
+  return ""; // Return empty string if 'T' not found
+}
+
+// Extract the time (portion between 'T' and '+') from the timestamp
+String extractTime(String timestamp) {
+  int tIndex = timestamp.indexOf('T');
+  int plusIndex = timestamp.indexOf('+');
+
+  if (tIndex != -1 && plusIndex != -1) {
+    return timestamp.substring(tIndex + 1, plusIndex); // Extract time between 'T' and '+'
+  }
+  return ""; // Return empty string if time not found
+}
+
 void handleDataRequest() {
   String filename = server.arg("file");
 
-  String html = "<html><body>";
+  String html = "<html><head>";
+  html += "<meta charset='UTF-8'>";  // Ensure correct character encoding
+  html += "<style>";
+  html += "  body { font-family: Arial, sans-serif; }"; // Set font style to Arial for the whole page
+  html += "  .box {";
+  html += "    width: 150px;";  // Adjusted box width for additional text
+  html += "    height: 100px;"; // Adjusted height for the date text
+  html += "    margin: 10px;";
+  html += "    padding: 20px;";
+  html += "    display: inline-block;";
+  html += "    text-align: center;";
+  html += "    border: 2px solid #ccc;";
+  html += "    border-radius: 8px;";
+  html += "    box-shadow: 0 4px 6px rgba(0,0,0,0.1);";
+  html += "    background-color: #f8f8f8;";
+  html += "  }";
+  html += "  .value {";
+  html += "    font-size: 1.8em;";  // Larger size for time
+  html += "    font-weight: bold;";
+  html += "  }";
+  html += "  .date {";
+  html += "    font-size: 0.9em;";  // Smaller size for date
+  html += "    font-weight: normal;";
+  html += "    margin-top: 5px;";
+  html += "  }";
+  html += "  .unit {";
+  html += "    font-size: 0.8em;";
+  html += "    font-weight: normal;";
+  html += "  }";
+  html += "</style>";
+  html += "</head><body>";
+
   html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
-  html += "<h1>Data Plot</h1>";
-  html += "<div id='plot'></div>";
+  
+  // Display the latest Time and Date, PM2.5, and Temperature values in square boxes
+  html += "<div style='display: flex; justify-content: center;'>";
+  html += "<div class='box' id='timeBox'>";  // Modified box for Time and Date
+  html += "<div>Time and Date</div>";
+  html += "<div class='value' id='timeValue'>Loading...</div>";  // For time (bold)
+  html += "<div class='date' id='dateValue'>Loading...</div>";   // For date (normal font)
+  html += "</div>";
+  html += "<div class='box' id='pm25Box'>";
+  html += "<div>PM2.5</div>";
+  html += "<div class='value' id='pm25Value'>Loading...</div>";
+  html += "<div class='unit' id='pm25Unit'>(µg/m³)</div>";
+  html += "</div>";
+  html += "<div class='box' id='tempBox'>";
+  html += "<div>Temperature</div>";
+  html += "<div class='value' id='tempValue'>Loading...</div>";
+  html += "<div class='unit' id='tempUnit'>(°C)</div>";
+  html += "</div>";
+  html += "</div>";
+
+  // Plot container
+  html += "<div id='plot' style='width: 80%; margin: 0 auto;'></div>";
+  
   html += "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>";
+  
+  // JavaScript to fetch the latest data and plot
   html += "<script>";
-  html += "async function fetchPlotData() {";
+  html += "async function fetchData() {";
   html += "  let response = await fetch('/api/plotData?file=" + filename + "');";
   html += "  let data = await response.json();";
+  
+  // Update Date, Time, PM2.5, and Temperature values in the boxes
+  html += "  let latestTime = data.UTC_timestamp[data.UTC_timestamp.length - 1];";  // Get the latest time
+  html += "  let latestDate = data.date[data.date.length - 1];";  // Get the latest date
+  html += "  document.getElementById('timeValue').textContent = latestTime;";       // Update the time (bold)
+  html += "  document.getElementById('dateValue').textContent = latestDate;";       // Update the date (normal font)
+  html += "  let pm25 = data['PM2.5'][data['PM2.5'].length - 1];";
+  html += "  document.getElementById('pm25Value').textContent = (pm25 % 1 === 0) ? pm25.toFixed(0) : pm25.toFixed(2);";  // Show integer if it's a whole number
+  html += "  document.getElementById('tempValue').textContent = data['Temperature'][data['Temperature'].length - 1].toFixed(2);";  // Latest Temperature value
+  
+  // Plot the data
   html += "  let trace = {";
   html += "    x: data.UTC_timestamp,";
   html += "    y: data['PM2.5'],";
@@ -966,16 +1057,20 @@ void handleDataRequest() {
   html += "    mode: 'lines+markers',";
   html += "    name: 'PM2.5'";
   html += "  };";
+  
   html += "  let layout = {";
   html += "    title: 'PM2.5 Over Time',";
   html += "    xaxis: { title: 'Time' },";
   html += "    yaxis: { title: 'PM2.5 (µg/m³)' }";
   html += "  };";
+  
   html += "  Plotly.newPlot('plot', [trace], layout);";
   html += "}";
-  html += "fetchPlotData();";  // Fetch and render the plot when the page loads";
-  html += "setInterval(fetchPlotData, 10000);";  // Refresh plot every 10 seconds";
+  
+  html += "fetchData();";  // Fetch and render the plot when the page loads
+  html += "setInterval(fetchData, 10000);";  // Refresh plot and data every 10 seconds
   html += "</script>";
+  
   html += "</body></html>";
 
   server.send(200, "text/html", html);
