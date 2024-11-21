@@ -90,8 +90,11 @@ char fileToUpload[30];
 bool timeSetOnce = false;
 
 // Replace with your network credentials
-const char* ssid     = "Qosain";
-const char* password = "12345678";
+// const char* ssid     = "Qosain";
+// const char* password = "12345678";
+
+const char* ssid     = "Wireless";
+const char* password = "Lums@12345";
 
 WebServer server(80); // Create a web server on port 80
 TinyGPSPlus gps;
@@ -276,10 +279,13 @@ void setup() {
   server.serveStatic("/qosain.jpg", SD, "/qosain.jpg");  // Serve logo image from SD card
   server.on("/", HTTP_GET, handleRoot);                // Handle root route
   server.on("/list", HTTP_GET, handleFileList);         // Handle file list route
+  server.on("/api/fileList", HTTP_GET, handleFileListAPI);         // Handle file list route
+  server.on("/view", handleViewFile);
   server.on("/download", HTTP_GET, handleFileDownload); // Handle file download route
   server.on("/delete", HTTP_GET, handleFileDelete);  // Map "/delete" URL to the handleFileDelete function
   server.on("/plot", HTTP_GET, handleDataRequest);      // Handle plotting route
-  server.on("/view", handleViewFile);
+  server.on("/api/plotData", HTTP_GET, handlePlotData); // New endpoint for serving JSON data for plots
+
 
   server.begin();
   Serial.println("Server started");
@@ -747,35 +753,57 @@ void handleFileDelete() {
   }
 }
 
-void handleFileList() {
+void handleFileListAPI() {
+  DynamicJsonDocument jsonDoc(1024);
+  JsonArray fileList = jsonDoc.createNestedArray("files");
 
-  String html = "<html><body>";
-
-  // Add the company logo at the top of the page
-  html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
-
-  // Add the title and the list of available files
-  html += "<h1>Available Files</h1><ul>";
-  
   File dir = SD.open("/");
   while (File entry = dir.openNextFile()) {
     String filename = entry.name();
-    html += "<li>";
-
-    // Make the file name a clickable link to view the file in the browser
-    if (filename.endsWith(".csv")) {
-      html += "<a href='/view?file=" + filename + "'>" + filename + "</a>";
-      html += " <a href='/download?file=" + filename + "'>Download</a>";
-      html += " <a href='/delete?file=" + filename + "'>Delete</a>";
-      html += " <a href='/plot?file=" + filename + "'> Plot</a>";
-    } else {
-      html += filename;
-    }
-    
-    html += "</li>";
+    fileList.add(filename);
   }
-  html += "</ul></body></html>";
-  
+  dir.close();
+
+  String jsonResponse;
+  serializeJson(jsonDoc, jsonResponse);
+  server.send(200, "application/json", jsonResponse);
+}
+
+void handleFileList() {
+  String html = "<html><body>";
+
+  // Add company logo
+  html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
+
+  // Title and dynamic file list
+  html += "<h1>Available Files</h1>";
+  html += "<ul id='fileList'>Loading...</ul>"; // Placeholder for the dynamic file list
+
+  // JavaScript for fetching and updating the file list
+  html += "<script>";
+  html += "async function fetchFileList() {";
+  html += "  let response = await fetch('/api/fileList');";
+  html += "  let data = await response.json();";
+  html += "  let fileList = document.getElementById('fileList');";
+  html += "  fileList.innerHTML = '';"; // Clear current list";
+  html += "  data.files.forEach(file => {";
+  html += "    let listItem = document.createElement('li');";
+  html += "    if (file.endsWith('.csv')) {";
+  html += "      listItem.innerHTML = `<a href='/view?file=${file}'>${file}</a> ` +";
+  html += "                          `<a href='/download?file=${file}'>Download</a> ` +";
+  html += "                          `<a href='/delete?file=${file}'>Delete</a> ` +";
+  html += "                          `<a href='/plot?file=${file}'>Plot</a>`;";
+  html += "    } else {";
+  html += "      listItem.textContent = file;";
+  html += "    }";
+  html += "    fileList.appendChild(listItem);";
+  html += "  });";
+  html += "}";
+  html += "fetchFileList();";  // Fetch files when the page loads
+  html += "setInterval(fetchFileList, 10000);";  // Refresh file list every 10 seconds
+  html += "</script>";
+
+  html += "</body></html>";
   server.send(200, "text/html", html);
 }
 
@@ -811,139 +839,145 @@ String extractTime(String timestamp) {
   return "";
 }
 
-void handleDataRequest() {
-  // Ensure 'file' parameter is provided
+void handlePlotData() {
   if (!server.hasArg("file")) {
     server.send(400, "text/plain", "Bad Request: 'file' parameter missing");
     return;
   }
 
   String filename = server.arg("file");
-
-  // Open the requested file on the SD card
   File file = SD.open("/" + filename);
   if (!file) {
     server.send(404, "text/plain", "File not found");
     return;
   }
 
-  // Variables to store column indexes
-  int timestampIndex = -1;
-  int pm25Index = -1;
-
-  // Prepare JSON response for plotting data
+  // Create JSON document
   DynamicJsonDocument jsonDoc(2048);
   JsonArray timestamps = jsonDoc.createNestedArray("UTC_timestamp");
   JsonArray pm25Values = jsonDoc.createNestedArray("PM2.5");
 
-  // Read the header to determine column indexes
+  // Variables to store column indexes
+  int timestampIndex = -1;
+  int pm25Index = -1;
+
+  // Read header to determine column indexes
   if (file.available()) {
     String header = file.readStringUntil('\n');
-    header.trim(); // Clean the header line
+    header.trim(); // Remove any whitespace
 
-    // Split the header by commas
+    // Parse the header
     int columnIndex = 0;
     int prevIndex = 0;
     for (int i = 0; i <= header.length(); i++) {
       if (header[i] == ',' || i == header.length()) {
-        // Extract column name
         String columnName = header.substring(prevIndex, i);
-        columnName.trim(); // Clean the column name
+        columnName.trim(); // Clean up the column name
 
-        // Identify the required columns
         if (columnName == "UTC_timestamp") {
           timestampIndex = columnIndex;
         } else if (columnName == "PM2.5") {
           pm25Index = columnIndex;
         }
+
         prevIndex = i + 1;
         columnIndex++;
       }
     }
   }
 
-  // Validate that both required columns were found
+  // Validate that required columns were found
   if (timestampIndex == -1 || pm25Index == -1) {
     server.send(500, "text/plain", "Error: Required columns not found in file");
     file.close();
     return;
   }
 
-  // Read the file line by line
+  // Read and parse the file line by line
   while (file.available()) {
     String line = file.readStringUntil('\n');
-    line.trim(); // Remove any leading or trailing whitespace
+    line.trim(); // Clean the line
 
     // Skip empty lines
     if (line == "") {
       continue;
     }
 
-    // Split the line by commas
     int columnIndex = 0;
     int prevIndex = 0;
     String timestamp = "";
     String pm25 = "";
+
+    // Parse the line
     for (int i = 0; i <= line.length(); i++) {
       if (line[i] == ',' || i == line.length()) {
-        // Extract value
         String value = line.substring(prevIndex, i);
         value.trim(); // Clean the value
 
-        // Assign to the respective variable
         if (columnIndex == timestampIndex) {
           timestamp = value;
         } else if (columnIndex == pm25Index) {
           pm25 = value;
         }
+
         prevIndex = i + 1;
         columnIndex++;
       }
     }
 
-    // Extract time from UTC_timestamp
+    // Extract time and add to JSON array
     if (timestamp != "") {
       String time = extractTime(timestamp);
-      timestamps.add(time); // Add the extracted time
+      timestamps.add(time);
     }
 
-    // Add PM2.5 values to JSON array
+    // Add PM2.5 value to JSON array
     if (pm25 != "") {
       pm25Values.add(pm25.toFloat());
     }
   }
+
   file.close();
 
   // Convert JSON document to string
   String jsonResponse;
   serializeJson(jsonDoc, jsonResponse);
 
-  // Send HTML page with Plotly plot
+  // Send the JSON response
+  server.send(200, "application/json", jsonResponse);
+}
+
+void handleDataRequest() {
+  String filename = server.arg("file");
+
   String html = "<html><body>";
-    // Add the company logo at the top of the page
   html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
   html += "<h1>Data Plot</h1>";
   html += "<div id='plot'></div>";
   html += "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>";
   html += "<script>";
-  html += "let data = " + jsonResponse + ";";  // Insert JSON response here
-  html += "let trace = {";
-  html += "  x: data.UTC_timestamp,";
-  html += "  y: data['PM2.5'],";
-  html += "  type: 'scatter',";
-  html += "  mode: 'lines+markers',";
-  html += "  name: 'PM2.5'";
-  html += "};";
-  html += "let layout = {";
-  html += "  title: 'PM2.5 Over Time',";
-  html += "  xaxis: { title: 'Time' },";
-  html += "  yaxis: { title: 'PM2.5 (µg/m³)' }";
-  html += "};";
-  html += "Plotly.newPlot('plot', [trace], layout);";  // Render the plot in the div
+  html += "async function fetchPlotData() {";
+  html += "  let response = await fetch('/api/plotData?file=" + filename + "');";
+  html += "  let data = await response.json();";
+  html += "  let trace = {";
+  html += "    x: data.UTC_timestamp,";
+  html += "    y: data['PM2.5'],";
+  html += "    type: 'scatter',";
+  html += "    mode: 'lines+markers',";
+  html += "    name: 'PM2.5'";
+  html += "  };";
+  html += "  let layout = {";
+  html += "    title: 'PM2.5 Over Time',";
+  html += "    xaxis: { title: 'Time' },";
+  html += "    yaxis: { title: 'PM2.5 (µg/m³)' }";
+  html += "  };";
+  html += "  Plotly.newPlot('plot', [trace], layout);";
+  html += "}";
+  html += "fetchPlotData();";  // Fetch and render the plot when the page loads";
+  html += "setInterval(fetchPlotData, 10000);";  // Refresh plot every 10 seconds";
   html += "</script>";
   html += "</body></html>";
 
-  // Send HTML response
   server.send(200, "text/html", html);
 }
 
