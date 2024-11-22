@@ -841,36 +841,28 @@ void handlePlotData() {
     return;
   }
 
-  // Create JSON document
-  DynamicJsonDocument jsonDoc(2048);
-  JsonArray dates = jsonDoc.createNestedArray("date"); // New array for dates
-  JsonArray timestamps = jsonDoc.createNestedArray("UTC_timestamp");
-  JsonArray pm25Values = jsonDoc.createNestedArray("PM2.5");
-  JsonArray temperatureValues = jsonDoc.createNestedArray("Temperature");
-
   // Variables to store column indexes
   int timestampIndex = -1;
   int pm25Index = -1;
-  int temperatureIndex = -1; // New variable for temperature column
+  int temperatureIndex = -1;
 
   // Read header to determine column indexes
   if (file.available()) {
     String header = file.readStringUntil('\n');
-    header.trim(); // Remove any whitespace
+    header.trim();
 
-    // Parse the header
     int columnIndex = 0;
     int prevIndex = 0;
     for (int i = 0; i <= header.length(); i++) {
       if (header[i] == ',' || i == header.length()) {
         String columnName = header.substring(prevIndex, i);
-        columnName.trim(); // Clean up the column name
+        columnName.trim();
 
         if (columnName == "UTC_timestamp") {
           timestampIndex = columnIndex;
         } else if (columnName == "PM2.5") {
           pm25Index = columnIndex;
-        } else if (columnName == "temperature") { // Check for the "temperature" column
+        } else if (columnName == "temperature") {
           temperatureIndex = columnIndex;
         }
 
@@ -887,33 +879,36 @@ void handlePlotData() {
     return;
   }
 
-  // Read and parse the file line by line
+  // Start streaming JSON response
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "application/json");
+  server.sendContent("{\"data\":[");
+
+  bool firstRow = true;
+
+  // Process each row dynamically
   while (file.available()) {
     String line = file.readStringUntil('\n');
-    line.trim(); // Clean the line
+    line.trim();
 
-    // Skip empty lines
-    if (line == "") {
-      continue;
-    }
+    if (line == "") continue; // Skip empty lines
 
     int columnIndex = 0;
     int prevIndex = 0;
     String timestamp = "";
     String pm25 = "";
-    String temperature = ""; // New variable for temperature value
+    String temperature = "";
 
-    // Parse the line
     for (int i = 0; i <= line.length(); i++) {
       if (line[i] == ',' || i == line.length()) {
         String value = line.substring(prevIndex, i);
-        value.trim(); // Clean the value
+        value.trim();
 
         if (columnIndex == timestampIndex) {
           timestamp = value;
         } else if (columnIndex == pm25Index) {
           pm25 = value;
-        } else if (columnIndex == temperatureIndex) { // Read temperature value
+        } else if (columnIndex == temperatureIndex) {
           temperature = value;
         }
 
@@ -922,35 +917,36 @@ void handlePlotData() {
       }
     }
 
-    // Extract date and time and add to JSON arrays
-    if (timestamp != "") {
-      String date = extractDate(timestamp); // Extract the date
-      String time = extractTime(timestamp); // Extract the time
-      if (date != "") {
-        dates.add(date);
-      }
-      if (time != "") {
-        timestamps.add(time);
-      }
-    }
+    // Construct JSON object for the current row
+    DynamicJsonDocument rowJson(512);
+    String date = extractDate(timestamp);
+    String time = extractTime(timestamp);
 
-    // Add PM2.5 and temperature values to JSON arrays
-    if (pm25 != "") {
-      pm25Values.add(pm25.toFloat());
+    if (date != "") {
+      rowJson["date"] = date;
     }
-    if (temperature != "") {
-      temperatureValues.add(temperature.toFloat());
+    if (time != "") {
+      rowJson["UTC_timestamp"] = time;
     }
+    rowJson["PM2.5"] = pm25.toFloat();
+    rowJson["Temperature"] = temperature.toFloat();
+
+    // Serialize the row JSON and send it to the client
+    String jsonRow;
+    serializeJson(rowJson, jsonRow);
+
+    if (!firstRow) {
+      server.sendContent(",");
+    } else {
+      firstRow = false;
+    }
+    server.sendContent(jsonRow);
   }
 
+  // Close JSON array and finalize the response
+  server.sendContent("]}");
+  server.sendContent(""); // Ensure content is flushed
   file.close();
-
-  // Convert JSON document to string
-  String jsonResponse;
-  serializeJson(jsonDoc, jsonResponse);
-
-  // Send the JSON response
-  server.send(200, "application/json", jsonResponse);
 }
 
 // Extract the date (portion before 'T') from the timestamp
@@ -1275,6 +1271,8 @@ void updateSampleSD() {
         updateDisplay("Couldn't open data file", 40, false);
         display.display();
     }
+
+    delay(50000);
 }
 
 // upload SD card data over serial port
@@ -1905,18 +1903,6 @@ void updateMenuSelection()
       #endif
     }
   }
-}
-
-// Function to update TimeLib's time with user-provided values
-void updateManualTime(int hour, int minute, int second, int day, int month, int year) {
-    setTime(hour, minute, second, day, month, year);  // Set time to TimeLib
-}
-
-// Example of calling `updateManualTime()` when user changes time
-void onUserTimeUpdate(int newHour, int newMinute, int newSecond, int newDay, int newMonth, int newYear) {
-    updateManualTime(newHour, newMinute, newSecond, newDay, newMonth, newYear);
-    // Reset any flags or variables if needed
-    timeSetOnce = true;  // Reset the manual time set flag
 }
 
 // function for displaying various pages/menus
