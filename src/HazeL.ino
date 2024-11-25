@@ -113,8 +113,8 @@ double longitude;
 double altitude;
 
 time_t prevTimeStamp = 0;
-uint8_t manualMonth = 0;
-uint8_t manualDay = 0;
+uint8_t manualMonth = 11;
+uint8_t manualDay = 24;
 uint16_t manualYear = CUR_YEAR;
 uint8_t manualHour = 0;
 uint8_t manualMinute = 0;
@@ -283,13 +283,15 @@ void waitForWiFiConnection() {
 void initializeWebServer() {
   server.serveStatic("/qosain.jpg", SD, "/qosain.jpg");
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/api/systemState", HTTP_GET, handleSystemStateAPI);
   server.on("/list", HTTP_GET, handleFileList);
   server.on("/api/fileList", HTTP_GET, handleFileListAPI);
   server.on("/view", handleViewFile);
   server.on("/download", HTTP_GET, handleFileDownload);
-  server.on("/delete", HTTP_GET, handleFileDelete);
-  server.on("/plot", HTTP_GET, handleDataRequest);
-  server.on("/api/plotData", HTTP_GET, handlePlotData);
+  server.on("/delete", HTTP_DELETE, handleFileDelete);
+  server.on("/downloadAll", HTTP_GET, handleDownloadAllFiles); // New route for downloading all files
+  server.on("/plot", HTTP_GET, handleRealTimeDataDisplay); // Serves the HTML page
+  server.on("/api/state", HTTP_GET, handleRealTimeData);    // Serves real-time JSON data
   server.begin();
   Serial.println("Server started");
 }
@@ -584,6 +586,18 @@ void loop() {
       // createDataFiles();
       updateSampleSD();
     }
+
+    // // Immediate first write and subsequent writes every 4 minutes
+    // static unsigned long lastSDUpdate = 0;
+    // const unsigned long SDUpdateInterval = 1 * 60 * 1000; // 4 minutes in milliseconds
+
+    // if (lastSDUpdate == 0 || curMillis - lastSDUpdate >= SDUpdateInterval)
+    // {
+    //     lastSDUpdate = curMillis;
+    //     // Perform the SD card update
+    //     updateSampleSD();
+    // }
+
   }
   else if(state == 3) // uploading data
   {
@@ -707,13 +721,39 @@ void handleRoot() {
   // Add the company logo at the top of the page
   html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
 
-  // Add the rest of the content (unchanged)
+  // Add title and links
   html += "<h1>Qosain Scientific Web Server</h1>";
   html += "<a href='/list'>List Files</a><br>";
-  
+
+  // Add a placeholder for plot link or a message
+  html += "<div id='plotSection' style='margin-top: 20px;'></div>";
+
+  // Add JavaScript to dynamically update the plot section
+  html += "<script>";
+  html += "async function checkState() {";
+  html += "  let response = await fetch('/api/systemState');";
+  html += "  let data = await response.json();";
+  html += "  let plotSection = document.getElementById('plotSection');";
+
+  html += "  if (data.state === 2) {";
+  html += "    plotSection.innerHTML = `<a href='/plot'>Real time data and plot</a>`;";
+  html += "  } else {";
+  html += "    plotSection.innerHTML = `<div style='color: red;'>Data collection is not active. No data and plot available.</div>`;";
+  html += "  }";
+  html += "}";
+
+  html += "checkState();"; // Call the function to check state when the page loads
+  html += "setInterval(checkState, 5000);"; // Periodically check state every 5 seconds
+  html += "</script>";
+
   html += "</body></html>";
-  
+
   server.send(200, "text/html", html);
+}
+
+void handleSystemStateAPI() {
+  String json = "{ \"state\": " + String(state) + " }";
+  server.send(200, "application/json", json);
 }
 
 void handleFileDownload() {
@@ -784,6 +824,10 @@ void handleFileList() {
 
   // Title and dynamic file list
   html += "<h1>Available Files</h1>";
+
+  // "Download All" button
+  html += "<button style='margin-bottom:10px;' onclick='downloadAllFiles()'>Download All</button>";
+
   html += "<ul id='fileList'>Loading...</ul>"; // Placeholder for the dynamic file list
 
   // JavaScript for fetching and updating the file list
@@ -792,24 +836,80 @@ void handleFileList() {
   html += "  let response = await fetch('/api/fileList');";
   html += "  let data = await response.json();";
   html += "  let fileList = document.getElementById('fileList');";
-  html += "  fileList.innerHTML = '';"; // Clear current list";
+  html += "  fileList.innerHTML = '';"; // Clear current list
   html += "  data.files.forEach(file => {";
   html += "    if (file.endsWith('.csv')) {"; // Only process .csv files
   html += "      let listItem = document.createElement('li');";
   html += "      listItem.innerHTML = `<a href='/view?file=${file}'>${file}</a> ` +";
-  html += "                          `<a href='/download?file=${file}'>Download</a> ` +";
-  html += "                          `<a href='/delete?file=${file}'>Delete</a> ` +";
-  html += "                          `<a href='/plot?file=${file}'>Plot</a>`;";
+  html += "                          `<button onclick='downloadFile(\"${file}\")'>Download</button> ` +";
+  html += "                          `<button onclick='deleteFile(\"${file}\")'>Delete</button>`;";
   html += "      fileList.appendChild(listItem);";
   html += "    }";
   html += "  });";
   html += "}";
+
+  // Download a single file
+  html += "function downloadFile(fileName) {";
+  html += "  window.location.href = `/download?file=${fileName}`;";
+  html += "}";
+
+  // Delete a single file
+  html += "async function deleteFile(fileName) {";
+  html += "  if (confirm(`Are you sure you want to delete ${fileName}?`)) {";
+  html += "    let response = await fetch(`/delete?file=${fileName}`, { method: 'DELETE' });";
+  html += "    if (response.ok) {";
+  html += "      alert(`${fileName} has been deleted.`);";
+  html += "      fetchFileList();"; // Refresh the file list
+  html += "    } else {";
+  html += "      alert('Failed to delete the file.');";
+  html += "    }";
+  html += "  }";
+  html += "}";
+
+  // Download all files
+  html += "function downloadAllFiles() {";
+  html += "  fetch('/api/fileList').then(response => response.json()).then(data => {";
+  html += "    data.files.filter(file => file.endsWith('.csv')).forEach(file => {";
+  html += "      let a = document.createElement('a');";
+  html += "      a.href = `/download?file=${file}`;";
+  html += "      a.download = file;";
+  html += "      document.body.appendChild(a);";
+  html += "      a.click();";
+  html += "      document.body.removeChild(a);";
+  html += "    });";
+  html += "  });";
+  html += "}";
+
   html += "fetchFileList();";  // Fetch files when the page loads
   html += "setInterval(fetchFileList, 10000);";  // Refresh file list every 10 seconds
   html += "</script>";
 
   html += "</body></html>";
   server.send(200, "text/html", html);
+}
+
+void handleDownloadAllFiles() {
+  File root = SD.open("/");
+  if (!root) {
+    server.send(500, "text/plain", "Failed to open SD card.");
+    return;
+  }
+
+  String allFiles = "";
+  while (File file = root.openNextFile()) {
+    if (!file.isDirectory() && String(file.name()).endsWith(".csv")) {
+      allFiles += String(file.name()) + "\n";
+    }
+    file.close();
+  }
+  root.close();
+
+  if (allFiles == "") {
+    server.send(404, "text/plain", "No .csv files found.");
+  } else {
+    // Response content with file list for download
+    server.send(200, "text/plain", "List of files to download:\n" + allFiles);
+  }
 }
 
 // Function to handle viewing .csv files
@@ -828,248 +928,170 @@ void handleViewFile() {
   file.close();
 }
 
-void handlePlotData() {
-  if (!server.hasArg("file")) {
-    server.send(400, "text/plain", "Bad Request: 'file' parameter missing");
+void handleRealTimeDataDisplay() {
+  // Check the system state before allowing access to the plot page (Server-side check)
+  if (state != 2) {
+    // Redirect to the root page if state is not 2
+    server.sendHeader("Location", "/");
+    server.send(303); // HTTP 303 See Other (redirect)
     return;
   }
-
-  String filename = server.arg("file");
-  File file = SD.open("/" + filename);
-  if (!file) {
-    server.send(404, "text/plain", "File not found");
-    return;
-  }
-
-  // Variables to store column indexes
-  int timestampIndex = -1;
-  int pm25Index = -1;
-  int temperatureIndex = -1;
-
-  // Read header to determine column indexes
-  if (file.available()) {
-    String header = file.readStringUntil('\n');
-    header.trim();
-
-    int columnIndex = 0;
-    int prevIndex = 0;
-    for (int i = 0; i <= header.length(); i++) {
-      if (header[i] == ',' || i == header.length()) {
-        String columnName = header.substring(prevIndex, i);
-        columnName.trim();
-
-        if (columnName == "UTC_timestamp") {
-          timestampIndex = columnIndex;
-        } else if (columnName == "PM2.5") {
-          pm25Index = columnIndex;
-        } else if (columnName == "temperature") {
-          temperatureIndex = columnIndex;
-        }
-
-        prevIndex = i + 1;
-        columnIndex++;
-      }
-    }
-  }
-
-  // Validate that required columns were found
-  if (timestampIndex == -1 || pm25Index == -1 || temperatureIndex == -1) {
-    server.send(500, "text/plain", "Error: Required columns not found in file");
-    file.close();
-    return;
-  }
-
-  // Start streaming JSON response
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "application/json");
-  server.sendContent("{\"data\":[");
-
-  bool firstRow = true;
-
-  // Process each row dynamically
-  while (file.available()) {
-    String line = file.readStringUntil('\n');
-    line.trim();
-
-    if (line == "") continue; // Skip empty lines
-
-    int columnIndex = 0;
-    int prevIndex = 0;
-    String timestamp = "";
-    String pm25 = "";
-    String temperature = "";
-
-    for (int i = 0; i <= line.length(); i++) {
-      if (line[i] == ',' || i == line.length()) {
-        String value = line.substring(prevIndex, i);
-        value.trim();
-
-        if (columnIndex == timestampIndex) {
-          timestamp = value;
-        } else if (columnIndex == pm25Index) {
-          pm25 = value;
-        } else if (columnIndex == temperatureIndex) {
-          temperature = value;
-        }
-
-        prevIndex = i + 1;
-        columnIndex++;
-      }
-    }
-
-    // Construct JSON object for the current row
-    DynamicJsonDocument rowJson(512);
-    String date = extractDate(timestamp);
-    String time = extractTime(timestamp);
-
-    if (date != "") {
-      rowJson["date"] = date;
-    }
-    if (time != "") {
-      rowJson["UTC_timestamp"] = time;
-    }
-    rowJson["PM2.5"] = pm25.toFloat();
-    rowJson["Temperature"] = temperature.toFloat();
-
-    // Serialize the row JSON and send it to the client
-    String jsonRow;
-    serializeJson(rowJson, jsonRow);
-
-    if (!firstRow) {
-      server.sendContent(",");
-    } else {
-      firstRow = false;
-    }
-    server.sendContent(jsonRow);
-  }
-
-  // Close JSON array and finalize the response
-  server.sendContent("]}");
-  server.sendContent(""); // Ensure content is flushed
-  file.close();
-}
-
-// Extract the date (portion before 'T') from the timestamp
-String extractDate(String timestamp) {
-  int tIndex = timestamp.indexOf('T'); // Find 'T' position
-  if (tIndex != -1) {
-    return timestamp.substring(0, tIndex); // Extract everything before 'T'
-  }
-  return ""; // Return empty string if 'T' not found
-}
-
-// Extract the time (portion between 'T' and '+') from the timestamp
-String extractTime(String timestamp) {
-  int tIndex = timestamp.indexOf('T');
-  int plusIndex = timestamp.indexOf('+');
-
-  if (tIndex != -1 && plusIndex != -1) {
-    return timestamp.substring(tIndex + 1, plusIndex); // Extract time between 'T' and '+'
-  }
-  return ""; // Return empty string if time not found
-}
-
-void handleDataRequest() {
-  String filename = server.arg("file");
 
   String html = "<html><head>";
-  html += "<meta charset='UTF-8'>";  // Ensure correct character encoding
+  html += "<meta charset='UTF-8'>";  // Ensure UTF-8 encoding is set
+  html += "<script src='https://cdn.plot.ly/plotly-2.20.0.min.js'></script>";
   html += "<style>";
-  html += "  body { font-family: Arial, sans-serif; }"; // Set font style to Arial for the whole page
-  html += "  .box {";
-  html += "    width: 150px;";  // Adjusted box width for additional text
-  html += "    height: 100px;"; // Adjusted height for the date text
-  html += "    margin: 10px;";
-  html += "    padding: 20px;";
-  html += "    display: inline-block;";
-  html += "    text-align: center;";
-  html += "    border: 2px solid #ccc;";
-  html += "    border-radius: 8px;";
-  html += "    box-shadow: 0 4px 6px rgba(0,0,0,0.1);";
-  html += "    background-color: #f8f8f8;";
-  html += "  }";
-  html += "  .value {";
-  html += "    font-size: 1.8em;";  // Larger size for time
-  html += "    font-weight: bold;";
-  html += "  }";
-  html += "  .date {";
-  html += "    font-size: 0.9em;";  // Smaller size for date
-  html += "    font-weight: normal;";
-  html += "    margin-top: 5px;";
-  html += "  }";
-  html += "  .unit {";
-  html += "    font-size: 0.8em;";
-  html += "    font-weight: normal;";
-  html += "  }";
+  html += "body { font-family: Arial, sans-serif; }";
+  html += "h3 { font-weight: normal; }";
+  html += ".box {";
+  html += "  border: 2px solid black;";
+  html += "  padding: 10px;";
+  html += "  width: 120px;";
+  html += "  height: 110px;";
+  html += "  line-height: 1.5;";
+  html += "  text-align: center;";
+  html += "  background-color: #f4f4f4;";
+  html += "  margin: 10px;";
+  html += "  display: flex;";
+  html += "  flex-direction: column;";
+  html += "  justify-content: center;";
+  html += "  align-items: center;";
+  html += "  border-radius: 8px;";
+  html += "  box-shadow: 0 4px 6px rgba(0,0,0,0.1);";
+  html += "}";
+  html += ".flex-container {";
+  html += "  display: flex;";
+  html += "  justify-content: center;";
+  html += "  gap: 20px;";
+  html += "  margin-top: 20px;";
+  html += "}";
+  html += ".bold { font-weight: bold; }";
+  html += ".unit { font-weight: normal; font-size: 0.9em; }";
+  html += ".time-date { display: flex; flex-direction: column; align-items: center; }";
   html += "</style>";
   html += "</head><body>";
 
   html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
+  html += "<div class='flex-container'>";
   
-  // Display the latest Time and Date, PM2.5, and Temperature values in square boxes
-  html += "<div style='display: flex; justify-content: center;'>";
-  html += "<div class='box' id='timeBox'>";  // Modified box for Time and Date
-  html += "<div>Time and Date</div>";
-  html += "<div class='value' id='timeValue'>Loading...</div>";  // For time (bold)
-  html += "<div class='date' id='dateValue'>Loading...</div>";   // For date (normal font)
+  html += "<div class='box'>";
+  html += "<h3>Time & Date</h3>";
+  html += "<div class='time-date'>";
+  html += "<div id='time' class='bold'></div>";
+  html += "<div id='date'></div>";
   html += "</div>";
-  html += "<div class='box' id='pm25Box'>";
-  html += "<div>PM2.5</div>";
-  html += "<div class='value' id='pm25Value'>Loading...</div>";
-  html += "<div class='unit' id='pm25Unit'>(µg/m³)</div>";
   html += "</div>";
-  html += "<div class='box' id='tempBox'>";
-  html += "<div>Temperature</div>";
-  html += "<div class='value' id='tempValue'>Loading...</div>";
-  html += "<div class='unit' id='tempUnit'>(°C)</div>";
+  
+  html += "<div class='box'>";
+  html += "<h3>PM2.5</h3>";
+  html += "<div><span id='pm25' class='bold'></span><span class='unit'> µg/m³</span></div>";
   html += "</div>";
+  
+  html += "<div class='box'>";
+  html += "<h3>Temperature</h3>";
+  html += "<div><span id='temperature' class='bold'></span><span class='unit'> °C</span></div>";
   html += "</div>";
 
-  // Plot container
-  html += "<div id='plot' style='width: 80%; margin: 0 auto;'></div>";
-  
-  html += "<script src='https://cdn.plot.ly/plotly-latest.min.js'></script>";
-  
-  // JavaScript to fetch the latest data and plot
+  html += "</div>";
+  html += "<div id='plot' style='width: 90%; height: 500px; margin: 20px auto;'></div>";
+
   html += "<script>";
-  html += "async function fetchData() {";
-  html += "  let response = await fetch('/api/plotData?file=" + filename + "');";
-  html += "  let data = await response.json();";
-  
-  // Update Date, Time, PM2.5, and Temperature values in the boxes
-  html += "  let latestTime = data.UTC_timestamp[data.UTC_timestamp.length - 1];";  // Get the latest time
-  html += "  let latestDate = data.date[data.date.length - 1];";  // Get the latest date
-  html += "  document.getElementById('timeValue').textContent = latestTime;";       // Update the time (bold)
-  html += "  document.getElementById('dateValue').textContent = latestDate;";       // Update the date (normal font)
-  html += "  let pm25 = data['PM2.5'][data['PM2.5'].length - 1];";
-  html += "  document.getElementById('pm25Value').textContent = (pm25 % 1 === 0) ? pm25.toFixed(0) : pm25.toFixed(2);";  // Show integer if it's a whole number
-  html += "  document.getElementById('tempValue').textContent = data['Temperature'][data['Temperature'].length - 1].toFixed(2);";  // Latest Temperature value
-  
-  // Plot the data
-  html += "  let trace = {";
-  html += "    x: data.UTC_timestamp,";
-  html += "    y: data['PM2.5'],";
-  html += "    type: 'scatter',";
-  html += "    mode: 'lines+markers',";
-  html += "    name: 'PM2.5'";
-  html += "  };";
-  
-  html += "  let layout = {";
-  html += "    title: 'PM2.5 Over Time',";
-  html += "    xaxis: { title: 'Time' },";
-  html += "    yaxis: { title: 'PM2.5 (µg/m³)' }";
-  html += "  };";
-  
-  html += "  Plotly.newPlot('plot', [trace], layout);";
+  html += "let plotData = { x: [], y: [], type: 'scatter', mode: 'lines+markers', name: 'PM2.5', marker: { color: 'blue' } };";
+  html += "let layout = { title: 'PM2.5 vs Time', xaxis: { title: 'Time' }, yaxis: { title: 'PM2.5 (µg/m³)', range: [0, null] } };";
+
+  html += "Plotly.newPlot('plot', [plotData], layout);";
+
+  html += "async function updateData() {";
+  html += "  let response = await fetch('/api/state');";
+  html += "  let state = await response.json();";
+
+  html += "  let currentTime = state.time.split(':');";
+  html += "  let hours = currentTime[0].padStart(2, '0');";
+  html += "  let minutes = currentTime[1].padStart(2, '0');";
+  html += "  let seconds = currentTime[2].padStart(2, '0');";
+  html += "  let formattedTime = `${hours}:${minutes}:${seconds}`;";
+  html += "  document.getElementById('time').innerHTML = formattedTime;";
+
+  // Fix and reverse the date
+  html += "  let dateParts = state.date.split('-');"; // Expecting YYYY-MM-DD
+  html += "  let reversedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;"; // Rearrange to DD-MM-YYYY
+  html += "  document.getElementById('date').innerHTML = reversedDate;";
+
+  html += "  document.getElementById('pm25').innerHTML = state['PM2.5'];";
+  html += "  document.getElementById('temperature').innerHTML = state.temperature;";
+
+  html += "  plotData.x.push(formattedTime);";
+  html += "  plotData.y.push(state['PM2.5']);";
+
+  html += "  Plotly.update('plot', { x: [plotData.x], y: [plotData.y] });";
   html += "}";
-  
-  html += "fetchData();";  // Fetch and render the plot when the page loads
-  html += "setInterval(fetchData, 10000);";  // Refresh plot and data every 10 seconds
+
+  html += "function startUpdates() {";
+  html += "  setInterval(updateData, 5000);";
+  html += "  updateData();";
+  html += "}";
+
+  html += "startUpdates();";
+
   html += "</script>";
-  
   html += "</body></html>";
 
   server.send(200, "text/html", html);
+}
+
+void handleRealTimeData() {
+    bool timeoutFlag = false;
+    time_t utcTime;
+
+    // Read sensors
+    float temperature = TPSensor.getTemperature(); // Temperature
+    float pressure = TPSensor.getPressure();       // Pressure (not used in response)
+    pms.read();
+    uint16_t pm25 = pms.pm25; // PM2.5 concentration in μg/m³
+
+    // Get timestamp
+    if (!manualTimeEntry) {
+        if (!gpsAwake) toggleGps();
+        unsigned long gpsStart = millis();
+
+        while (true) {
+            readGps();
+            if (millis() - gpsStart >= GPS_TIMEOUT) {
+                timeoutFlag = true;
+                break;
+            }
+            if (gps.date.isValid() && gps.time.isValid() && gps.date.year() == CUR_YEAR) {
+                setTime(
+                    gps.time.hour(), gps.time.minute(), gps.time.second(),
+                    gps.date.day(), gps.date.month(), gps.date.year()
+                );
+                utcTime = now();
+                rtc.setTime(second(utcTime), minute(utcTime), hour(utcTime), day(utcTime), month(utcTime), year(utcTime));
+                break;
+            }
+        }
+        if (gpsAwake) toggleGps();
+    }
+
+    if (manualTimeEntry || timeoutFlag) {
+        utcTime = now();
+    }
+
+    // Format UTC time
+    String formattedDate = String(year(utcTime)) + "-" + String(month(utcTime)) + "-" + String(day(utcTime));
+    String formattedTime = String(hour(utcTime)) + ":" + String(minute(utcTime)) + ":" + String(second(utcTime));
+
+    // Create JSON response
+    String jsonData = "{";
+    jsonData += "\"PM2.5\":" + String(pm25) + ",";
+    jsonData += "\"temperature\":" + String(temperature, 2) + ",";
+    jsonData += "\"date\":\"" + formattedDate + "\",";
+    jsonData += "\"time\":\"" + formattedTime + "\"";
+    jsonData += "}";
+
+    server.send(200, "application/json", jsonData);
+    Serial.println("Real-time data sent to web client:");
+    Serial.println(jsonData);
 }
 
 // update samples in SD card
@@ -1271,8 +1293,6 @@ void updateSampleSD() {
         updateDisplay("Couldn't open data file", 40, false);
         display.display();
     }
-
-    delay(50000);
 }
 
 // upload SD card data over serial port
@@ -1903,6 +1923,18 @@ void updateMenuSelection()
       #endif
     }
   }
+}
+
+// Function to update TimeLib's time with user-provided values
+void updateManualTime(int hour, int minute, int second, int day, int month, int year) {
+    setTime(hour, minute, second, day, month, year);  // Set time to TimeLib
+}
+
+// Example of calling `updateManualTime()` when user changes time
+void onUserTimeUpdate(int newHour, int newMinute, int newSecond, int newDay, int newMonth, int newYear) {
+    updateManualTime(newHour, newMinute, newSecond, newDay, newMonth, newYear);
+    // Reset any flags or variables if needed
+    timeSetOnce = true;  // Reset the manual time set flag
 }
 
 // function for displaying various pages/menus
