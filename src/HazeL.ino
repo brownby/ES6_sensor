@@ -93,8 +93,11 @@ bool timeSetOnce = false;
 // const char* ssid     = "TV-LED";
 // const char* password = "Lums@12345";
 
-const char* ssid     = "Qosain";
-const char* password = "12345678";
+const char* ssid = "AIR";
+const char* password = "Lums@123456789";
+
+// const char* ssid     = "Qosain";
+// const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
 TinyGPSPlus gps;
@@ -113,8 +116,8 @@ double longitude;
 double altitude;
 
 time_t prevTimeStamp = 0;
-uint8_t manualMonth = 11;
-uint8_t manualDay = 24;
+uint8_t manualMonth = 1;
+uint8_t manualDay = 1;
 uint16_t manualYear = CUR_YEAR;
 uint8_t manualHour = 0;
 uint8_t manualMinute = 0;
@@ -485,12 +488,12 @@ void loop() {
       {
         if(currentVertMenuSelection == 0) // Use GPS for time stamp
         {
-          manualTimeEntry = false;
-          createDataFiles(); // create the names for the data and gps files for data collection
+          manualTimeEntry = true;
+          // createDataFiles(); // create the names for the data and gps files for data collection
           // State and page are set from within createDataFiles() so that I can set it to different things on success and failure
-        }
-        else if(currentVertMenuSelection == 1) // Use manual entry + RTC
-        {
+        // }
+        // else if(currentVertMenuSelection == 1) // Use manual entry + RTC
+        // {
           page = 2; // enter date
           if(rtcSet)
           {
@@ -694,7 +697,6 @@ uint16_t RGBtoRGB565(byte r, byte g, byte b) {
     uint16_t rgb565 = (r565 << 11) | (g565 << 5) | b565;
     return rgb565;
 }
-
 
 // ISR for button being pressed
 void encRightButtonISR()
@@ -1248,27 +1250,27 @@ void updateSampleSD() {
         dataFile.print(utcSecond);
         dataFile.print("+00:00");
 
-        if (manualTimeEntry || timeoutFlag) {
-            dataFile.print(",,,");
-        } else {
-            dataFile.print(',');
-            dataFile.print(latitude, 5);
-            dataFile.print(',');
-            dataFile.print(longitude, 5);
-            dataFile.print(',');
-            dataFile.print(altitude);
-        }
+        // if (manualTimeEntry || timeoutFlag) {
+        //     dataFile.print(",,,");
+        // } else {
+        //     dataFile.print(',');
+        //     dataFile.print(latitude, 5);
+        //     dataFile.print(',');
+        //     dataFile.print(longitude, 5);
+        //     dataFile.print(',');
+        //     dataFile.print(altitude);
+        // }
 
         dataFile.print(',');
         dataFile.print(temp, 2);
-        dataFile.print(',');
-        dataFile.print(press, 2);
-        dataFile.print(",");
-        dataFile.print(PM1p0_atm);    // PM1.0 (atmo)
+        // dataFile.print(',');
+        // dataFile.print(press, 2);
+        // dataFile.print(",");
+        // dataFile.print(PM1p0_atm);    // PM1.0 (atmo)
         dataFile.print(",");
         dataFile.print(PM2p5_atm);    // PM2.5 (atmo)
-        dataFile.print(",");
-        dataFile.print(PM10p0_atm);   // PM10.0 (atmo)
+        // dataFile.print(",");
+        // dataFile.print(PM10p0_atm);   // PM10.0 (atmo)
         // dataFile.print(",");
         // dataFile.print(count_0p3um);   // >0.3µm particle count
         // dataFile.print(",");
@@ -1610,10 +1612,14 @@ metaFileName = fileNameSeed + "_mata.csv";
       // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um");
       // #endif
       // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um\n");
+      // #ifdef DEBUG_PRINT
+      // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
+      // #endif
+      // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
       #ifdef DEBUG_PRINT
-      Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
+      Serial.print("ms,manual_timestamp,temperature,PM2.5");
       #endif
-      newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
+      newFile.print("ms,timestamp,temperature,PM2.5\n");
     }
     else 
     {
@@ -1657,7 +1663,7 @@ void updateMenuSelection()
       switch (page)
       {
         case 0: case 1: // initial two menus
-          if(currentVertMenuSelection > 1) currentVertMenuSelection = 1; // only two choices on these pages
+          if(currentVertMenuSelection = 0 || currentVertMenuSelection > 0 || currentVertMenuSelection < 0) currentVertMenuSelection = 0; // only two choices on these pages
           break;
         case 2: // entering date
           if(currentHoriMenuSelection == 0) // month
@@ -1925,18 +1931,6 @@ void updateMenuSelection()
   }
 }
 
-// Function to update TimeLib's time with user-provided values
-void updateManualTime(int hour, int minute, int second, int day, int month, int year) {
-    setTime(hour, minute, second, day, month, year);  // Set time to TimeLib
-}
-
-// Example of calling `updateManualTime()` when user changes time
-void onUserTimeUpdate(int newHour, int newMinute, int newSecond, int newDay, int newMonth, int newYear) {
-    updateManualTime(newHour, newMinute, newSecond, newDay, newMonth, newYear);
-    // Reset any flags or variables if needed
-    timeSetOnce = true;  // Reset the manual time set flag
-}
-
 // function for displaying various pages/menus
 void displayPage(uint8_t page)
 {
@@ -1996,15 +1990,15 @@ void displayPage(uint8_t page)
       updateDisplay("Timestamp method?", 32, false);
       if (currentVertMenuSelection == 0)        
       {
-        updateDisplay("Auto (GPS)\n", 44, true);        //12
-        updateDisplay("Manual Entry", 52, false);             //52
+        // updateDisplay("Auto (GPS)\n", 44, true);        //12
+        updateDisplay("Manual Entry", 44, true);             //52
         // updateDisplay("Auto (GPS)\n", 12, true);
         // updateDisplay("Manual", 20, false); 
       }
       else if (currentVertMenuSelection == 1)
       {
-        updateDisplay("Auto (GPS)\n", 44, false);      //12
-        updateDisplay("Manual Entry", 52, true);     //52
+        // updateDisplay("Auto (GPS)\n", 44, false);      //12
+        updateDisplay("Manual Entry", 44, true);     //52
         // updateDisplay("Auto (GPS)\n", 12, false);      //12
         // updateDisplay("Manual", 20, true);
       }
@@ -2056,7 +2050,7 @@ void displayPage(uint8_t page)
       // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
       // updateDisplay("Enter time (UTC)", 0, false);  
       display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
-      updateDisplay("Enter time (UTC)", 32, false);    
+      updateDisplay("Enter time", 32, false);    
       char displayHour[3];
       char displayMinute[3];
 
@@ -2211,7 +2205,7 @@ void displayPage(uint8_t page)
           strcat(timeText, "0");
       }
       else {
-        toggleGps;
+        // toggleGps;
         if(gps.time.hour() < 10)
           strcat(timeText, "0");
 
@@ -2224,7 +2218,7 @@ void displayPage(uint8_t page)
         strcat(timeText, "0");
       }
       else{
-        toggleGps;
+        // toggleGps;
         if(gps.time.minute() < 10)
           strcat(timeText, "0");
       }
