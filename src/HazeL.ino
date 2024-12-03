@@ -29,6 +29,10 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
+
 uint16_t LCD_FOREGROUND = ST7735_WHITE;
 uint16_t LCD_BACKGROUND = ST7735_BLACK;
 
@@ -50,6 +54,10 @@ uint16_t LCD_BACKGROUND = ST7735_BLACK;
 #define SD_MISO 2      // MISO pin for SD card
 #define SD_MOSI 33      // MOSI pin for SD card
 #define SD_SCK 25       // Clock (SCK) pin for SD card
+
+// Define DHT11 pin and type
+#define DHTPIN 27    // GPIO D27 where the DHT11 data pin is connected
+#define DHTTYPE DHT11 // DHT11 sensor type
 
 // Create an instance of the SPI class with custom pins
 SPIClass customSPI(VSPI);  // Using VSPI, but with custom GPIO pins
@@ -76,7 +84,8 @@ SPIClass customSPI(VSPI);  // Using VSPI, but with custom GPIO pins
 #define LED_BUILTIN -1
 //HM3301 dustSensor;
 // SdFat SD;
-BMP280 TPSensor;
+// BMP280 TPSensor;  //BMP280
+DHT dht(DHTPIN, DHTTYPE);
 //#define SD LittleFS
 File dataFile;  
 File metaFile;
@@ -93,11 +102,8 @@ bool timeSetOnce = false;
 // const char* ssid     = "TV-LED";
 // const char* password = "Lums@12345";
 
-const char* ssid = "AIR";
-const char* password = "Lums@123456789";
-
-// const char* ssid     = "Qosain";
-// const char* password = "12345678";
+const char* ssid     = "Qosain";
+const char* password = "12345678";
 
 WebServer server(80); // Create a web server on port 80
 TinyGPSPlus gps;
@@ -197,8 +203,9 @@ void setup() {
   LCD_FOREGROUND = 0b0000001011100000;
   LCD_BACKGROUND = 0b1111111111111111;
   Serial1.begin(9600, SERIAL_8N1, 26, 14); // GPS Serial
-  Wire.begin(32, 27); // I2C Initialization
-
+  // Wire.begin(32, 27); // I2C Initialization
+  // Initialize the DHT sensor
+  // dht.begin();
   // Initialize Display
   DisplaySetup();
   display.setRotation(2);
@@ -304,7 +311,8 @@ void initializePMSensorAndGPS() {
   digitalWrite(PM_SET_PIN, HIGH);
   PM_SERIAL.begin(9600, SERIAL_8N1, 17, 16);
   pms.init();
-  TPSensor.init();
+  // TPSensor.init();
+  dht.begin();
 
   if (gpsAwake) {
     toggleGps();
@@ -488,12 +496,12 @@ void loop() {
       {
         if(currentVertMenuSelection == 0) // Use GPS for time stamp
         {
-          manualTimeEntry = true;
-          // createDataFiles(); // create the names for the data and gps files for data collection
+          manualTimeEntry = false;
+          createDataFiles(); // create the names for the data and gps files for data collection
           // State and page are set from within createDataFiles() so that I can set it to different things on success and failure
-        // }
-        // else if(currentVertMenuSelection == 1) // Use manual entry + RTC
-        // {
+        }
+        else if(currentVertMenuSelection == 1) // Use manual entry + RTC
+        {
           page = 2; // enter date
           if(rtcSet)
           {
@@ -697,6 +705,7 @@ uint16_t RGBtoRGB565(byte r, byte g, byte b) {
     uint16_t rgb565 = (r565 << 11) | (g565 << 5) | b565;
     return rgb565;
 }
+
 
 // ISR for button being pressed
 void encRightButtonISR()
@@ -975,7 +984,7 @@ void handleRealTimeDataDisplay() {
 
   html += "<div style='text-align:center;'><img src='/qosain.jpg' alt='Company Logo' width='200' height='auto'></div>";
   html += "<div class='flex-container'>";
-  
+
   html += "<div class='box'>";
   html += "<h3>Time & Date</h3>";
   html += "<div class='time-date'>";
@@ -983,25 +992,51 @@ void handleRealTimeDataDisplay() {
   html += "<div id='date'></div>";
   html += "</div>";
   html += "</div>";
-  
+
+  html += "<div class='box'>";
+  html += "<h3>PM1.0</h3>";
+  html += "<div><span id='pm1' class='bold'></span><span class='unit'> µg/m³</span></div>";
+  html += "</div>";
+
   html += "<div class='box'>";
   html += "<h3>PM2.5</h3>";
   html += "<div><span id='pm25' class='bold'></span><span class='unit'> µg/m³</span></div>";
   html += "</div>";
-  
+
+  html += "<div class='box'>";
+  html += "<h3>PM10.0</h3>";
+  html += "<div><span id='pm10' class='bold'></span><span class='unit'> µg/m³</span></div>";
+  html += "</div>";
+
   html += "<div class='box'>";
   html += "<h3>Temperature</h3>";
   html += "<div><span id='temperature' class='bold'></span><span class='unit'> °C</span></div>";
+  html += "</div>";
+
+  html += "<div class='box'>";
+  html += "<h3>Humidity</h3>";
+  html += "<div><span id='humidity' class='bold'></span><span class='unit'> %</span></div>";
   html += "</div>";
 
   html += "</div>";
   html += "<div id='plot' style='width: 90%; height: 500px; margin: 20px auto;'></div>";
 
   html += "<script>";
-  html += "let plotData = { x: [], y: [], type: 'scatter', mode: 'lines+markers', name: 'PM2.5', marker: { color: 'blue' } };";
-  html += "let layout = { title: 'PM2.5 vs Time', xaxis: { title: 'Time' }, yaxis: { title: 'PM2.5 (µg/m³)', range: [0, null] } };";
+  // Define traces for PM1.0, PM2.5, and PM10.0
+  html += "let pm1Data = { x: [], y: [], type: 'scatter', mode: 'lines+markers', name: 'PM1.0', marker: { color: 'red' } };";
+  html += "let pm25Data = { x: [], y: [], type: 'scatter', mode: 'lines+markers', name: 'PM2.5', marker: { color: 'blue' } };";
+  html += "let pm10Data = { x: [], y: [], type: 'scatter', mode: 'lines+markers', name: 'PM10.0', marker: { color: 'green' } };";
 
-  html += "Plotly.newPlot('plot', [plotData], layout);";
+  // Layout to accommodate multiple y-axes
+  html += "let layout = {";
+  html += "  title: 'PM1.0, PM2.5, and PM10.0 vs Time',";
+  html += "  xaxis: { title: 'Time' },";
+  html += "  yaxis: { title: 'PM (µg/m³)', range: [0, null] },";
+  html += "  showlegend: true,";
+  html += "  grid: { rows: 1, columns: 1, pattern: 'independent' }";
+  html += "};";
+
+  html += "Plotly.newPlot('plot', [pm1Data, pm25Data, pm10Data], layout);";
 
   html += "async function updateData() {";
   html += "  let response = await fetch('/api/state');";
@@ -1019,22 +1054,30 @@ void handleRealTimeDataDisplay() {
   html += "  let reversedDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;"; // Rearrange to DD-MM-YYYY
   html += "  document.getElementById('date').innerHTML = reversedDate;";
 
+  html += "  document.getElementById('pm1').innerHTML = state['PM1.0'];";
   html += "  document.getElementById('pm25').innerHTML = state['PM2.5'];";
+  html += "  document.getElementById('pm10').innerHTML = state['PM10.0'];";
   html += "  document.getElementById('temperature').innerHTML = state.temperature;";
+  html += "  document.getElementById('humidity').innerHTML = state.humidity;";
 
-  html += "  plotData.x.push(formattedTime);";
-  html += "  plotData.y.push(state['PM2.5']);";
+  // Update the plot data
+  html += "  pm1Data.x.push(formattedTime);";
+  html += "  pm1Data.y.push(state['PM1.0']);";
+  html += "  pm25Data.x.push(formattedTime);";
+  html += "  pm25Data.y.push(state['PM2.5']);";
+  html += "  pm10Data.x.push(formattedTime);";
+  html += "  pm10Data.y.push(state['PM10.0']);";
 
-  html += "  Plotly.update('plot', { x: [plotData.x], y: [plotData.y] });";
+  // Update the plot
+  html += "  Plotly.update('plot', { x: [pm1Data.x, pm25Data.x, pm10Data.x], y: [pm1Data.y, pm25Data.y, pm10Data.y] });";
   html += "}";
-
+  
   html += "function startUpdates() {";
   html += "  setInterval(updateData, 5000);";
   html += "  updateData();";
   html += "}";
 
   html += "startUpdates();";
-
   html += "</script>";
   html += "</body></html>";
 
@@ -1046,10 +1089,12 @@ void handleRealTimeData() {
     time_t utcTime;
 
     // Read sensors
-    float temperature = TPSensor.getTemperature(); // Temperature
-    float pressure = TPSensor.getPressure();       // Pressure (not used in response)
+    float humidity = dht.readHumidity();            // Humidity
+    float temperature = dht.readTemperature();      // Temperature in Celsius
     pms.read();
-    uint16_t pm25 = pms.pm25; // PM2.5 concentration in μg/m³
+    uint16_t pm1p0 = pms.pm01;      // PM1.0 concentration in μg/m³
+    uint16_t pm25 = pms.pm25;      // PM2.5 concentration in μg/m³
+    uint16_t pm10p0 = pms.pm10;    // PM10.0 concentration in μg/m³
 
     // Get timestamp
     if (!manualTimeEntry) {
@@ -1085,8 +1130,11 @@ void handleRealTimeData() {
 
     // Create JSON response
     String jsonData = "{";
-    jsonData += "\"PM2.5\":" + String(pm25) + ",";
-    jsonData += "\"temperature\":" + String(temperature, 2) + ",";
+    jsonData += "\"PM1.0\":" + String(pm1p0) + ",";  // PM1.0
+    jsonData += "\"PM2.5\":" + String(pm25) + ",";  // PM2.5
+    jsonData += "\"PM10.0\":" + String(pm10p0) + ",";  // PM10.0
+    jsonData += "\"temperature\":" + String(temperature, 2) + ",";  // Temperature
+    jsonData += "\"humidity\":" + String(humidity, 2) + ",";  // Humidity
     jsonData += "\"date\":\"" + formattedDate + "\",";
     jsonData += "\"time\":\"" + formattedTime + "\"";
     jsonData += "}";
@@ -1111,7 +1159,7 @@ void updateSampleSD() {
     }
 
     float temp;
-    float press;
+    float humidity;
 
     // Read the PM sensor
     pms.read();
@@ -1127,8 +1175,8 @@ void updateSampleSD() {
 
     if (timestampFlag) { // If it is time to get a time stamp
         // Read temperature and pressure
-        temp = TPSensor.getTemperature();
-        press = TPSensor.getPressure();
+        temp = dht.readTemperature();
+        humidity = dht.readHumidity();
 
         // If you chose to use GPS, keep getting time, lat, long, and alt from GPS
         if (!manualTimeEntry) {
@@ -1138,8 +1186,8 @@ void updateSampleSD() {
             display.setTextColor(LCD_FOREGROUND);
             display.setCursor(10, display.height() - 10);
             display.print("Back ");
-            updateDisplay("Reading GPS...", 40, false);
-            display.display();
+            // updateDisplay("Reading GPS...", 40, false);
+            // display.display();
 
             // Wake up GPS module
             if (!gpsAwake) {
@@ -1250,27 +1298,27 @@ void updateSampleSD() {
         dataFile.print(utcSecond);
         dataFile.print("+00:00");
 
-        // if (manualTimeEntry || timeoutFlag) {
-        //     dataFile.print(",,,");
-        // } else {
-        //     dataFile.print(',');
-        //     dataFile.print(latitude, 5);
-        //     dataFile.print(',');
-        //     dataFile.print(longitude, 5);
-        //     dataFile.print(',');
-        //     dataFile.print(altitude);
-        // }
+        if (manualTimeEntry || timeoutFlag) {
+            dataFile.print(",,,");
+        } else {
+            dataFile.print(',');
+            dataFile.print(latitude, 5);
+            dataFile.print(',');
+            dataFile.print(longitude, 5);
+            dataFile.print(',');
+            dataFile.print(altitude);
+        }
 
         dataFile.print(',');
         dataFile.print(temp, 2);
-        // dataFile.print(',');
-        // dataFile.print(press, 2);
-        // dataFile.print(",");
-        // dataFile.print(PM1p0_atm);    // PM1.0 (atmo)
+        dataFile.print(',');
+        dataFile.print(humidity, 2);
+        dataFile.print(",");
+        dataFile.print(PM1p0_atm);    // PM1.0 (atmo)
         dataFile.print(",");
         dataFile.print(PM2p5_atm);    // PM2.5 (atmo)
-        // dataFile.print(",");
-        // dataFile.print(PM10p0_atm);   // PM10.0 (atmo)
+        dataFile.print(",");
+        dataFile.print(PM10p0_atm);   // PM10.0 (atmo)
         // dataFile.print(",");
         // dataFile.print(count_0p3um);   // >0.3µm particle count
         // dataFile.print(",");
@@ -1612,14 +1660,10 @@ metaFileName = fileNameSeed + "_mata.csv";
       // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um");
       // #endif
       // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0,0.3um,0.5um,1.0um,2.5um,5.0um,10.0um\n");
-      // #ifdef DEBUG_PRINT
-      // Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0");
-      // #endif
-      // newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,pressure,PM1.0,PM2.5,PM10.0\n");
       #ifdef DEBUG_PRINT
-      Serial.print("ms,manual_timestamp,temperature,PM2.5");
+      Serial.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,humidity,PM1.0,PM2.5,PM10.0");
       #endif
-      newFile.print("ms,timestamp,temperature,PM2.5\n");
+      newFile.print("ms,UTC_timestamp,latitude,longitude,altitude,temperature,humidity,PM1.0,PM2.5,PM10.0\n");
     }
     else 
     {
@@ -1638,297 +1682,443 @@ metaFileName = fileNameSeed + "_mata.csv";
 }
 
 // Update current menu selection based on encoders
-void updateMenuSelection()
-{
-  long encRightPosition = encRight.getPosition();
-  long encLeftPosition = encLeft.getPosition();
-  //Serial.print("EncA"); Serial.print(encRightPosition);
-  //Serial.print(", EncB"); Serial.println(encLeftPosition);
-  #ifdef DEBUG_PRINT
-  // Serial.print("Right encoder position: ");
-  // Serial.println(encRightPosition);
-  #endif
-  if (encRightPosition > encRightOldPosition + 2) // clockwise, go down
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Right knob turned cw");
-    #endif
-    encRightOldPosition = encRightPosition;
+// void updateMenuSelection()
+// {
+//   long encRightPosition = encRight.getPosition();
+//   long encLeftPosition = encLeft.getPosition();
+//   //Serial.print("EncA"); Serial.print(encRightPosition);
+//   //Serial.print(", EncB"); Serial.println(encLeftPosition);
+//   #ifdef DEBUG_PRINT
+//   // Serial.print("Right encoder position: ");
+//   // Serial.println(encRightPosition);
+//   #endif
+//   if (encRightPosition > encRightOldPosition + 2) // clockwise, go down
+//   {
+//     #ifdef DEBUG_PRINT
+//     Serial.println("Right knob turned cw");
+//     #endif
+//     encRightOldPosition = encRightPosition;
 
-    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
-    {
-      prevMenuMillis = curMillis;
-      prevVertMenuSelection = currentVertMenuSelection;
-      currentVertMenuSelection++;
-      switch (page)
-      {
-        case 0: case 1: // initial two menus
-          if(currentVertMenuSelection = 0 || currentVertMenuSelection > 0 || currentVertMenuSelection < 0) currentVertMenuSelection = 0; // only two choices on these pages
-          break;
-        case 2: // entering date
-          if(currentHoriMenuSelection == 0) // month
-          {
-            if(currentVertMenuSelection > 11) currentVertMenuSelection = 0;
-            manualMonth = currentVertMenuSelection + 1;
-          }
-          else if(currentHoriMenuSelection == 1) // day
-          {
-            switch(manualMonth)
-            {
-              case 4: case 6: case 9: case 11: // Apr, Jun, Sept, Nov
-                if(currentVertMenuSelection > 29) currentVertMenuSelection = 0;
-                break;
-              case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
-                if(currentVertMenuSelection > 30) currentVertMenuSelection = 0;
-                break;
-              case 2: // February
-                if(manualYear % 4 == 0) 
-                {
-                  if(currentVertMenuSelection > 28) currentVertMenuSelection = 0;
-                }
-                else
-                {
-                  if(currentVertMenuSelection > 27) currentVertMenuSelection = 0;
-                }
-                break;
+//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
+//     {
+//       prevMenuMillis = curMillis;
+//       prevVertMenuSelection = currentVertMenuSelection;
+//       currentVertMenuSelection++;
+//       switch (page)
+//       {
+//         case 0: case 1: // initial two menus
+//           if(currentVertMenuSelection > 1) currentVertMenuSelection = 1; // only two choices on these pages
+//           break;
+//         case 2: // entering date
+//           if(currentHoriMenuSelection == 0) // month
+//           {
+//             if(currentVertMenuSelection > 11) currentVertMenuSelection = 0;
+//             manualMonth = currentVertMenuSelection + 1;
+//           }
+//           else if(currentHoriMenuSelection == 1) // day
+//           {
+//             switch(manualMonth)
+//             {
+//               case 4: case 6: case 9: case 11: // Apr, Jun, Sept, Nov
+//                 if(currentVertMenuSelection > 29) currentVertMenuSelection = 0;
+//                 break;
+//               case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
+//                 if(currentVertMenuSelection > 30) currentVertMenuSelection = 0;
+//                 break;
+//               case 2: // February
+//                 if(manualYear % 4 == 0) 
+//                 {
+//                   if(currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+//                 }
+//                 else
+//                 {
+//                   if(currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+//                 }
+//                 break;
+//             }
+//             manualDay = currentVertMenuSelection + 1;
+//           }
+//           else if(currentHoriMenuSelection == 2) // year
+//           {
+//             if(currentVertMenuSelection > 2099) 
+//             {
+//               currentVertMenuSelection = CUR_YEAR;
+//             }
+//             else if(currentVertMenuSelection < CUR_YEAR)
+//             {
+//               currentVertMenuSelection = CUR_YEAR;
+//             }
+//             manualYear = currentVertMenuSelection;
+//           }
+//           break;
+//         case 3: // entering time
+//           if(currentHoriMenuSelection == 0) // hour
+//           {
+//             if(currentVertMenuSelection > 23) currentVertMenuSelection = 0;
+//             manualHour = currentVertMenuSelection;
+//           }
+//           else if(currentHoriMenuSelection == 1) // minute
+//           {
+//             if(currentVertMenuSelection > 59)
+//             {
+//               currentVertMenuSelection = 0;
+//               manualHour++;
+//               if(manualHour > 23) manualHour = 0;
+//             }
+//             manualMinute = currentVertMenuSelection;
+//           }
+//           break;
+//         case 4: // selecting file from SD card
+//           if(currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
+//           if(currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection)
+//           {
+//             scroll++;
+//           }
+//           break;
+//       }
+//       #ifdef DEBUG_PRINT
+//       Serial.print("Current vert menu selection: ");
+//       Serial.println(currentVertMenuSelection);
+//       #endif
+//     }
+//   }
+//   else if (encRightPosition < encRightOldPosition - 2) // counterclockwise, go up
+//   {
+//     #ifdef DEBUG_PRINT
+//     Serial.println("Right knob turned ccw");
+//     #endif
+//     encRightOldPosition = encRightPosition;
+
+//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
+//     {
+//       prevMenuMillis = curMillis;
+//       prevVertMenuSelection = currentVertMenuSelection;
+//       currentVertMenuSelection--;
+//       switch(page)
+//       {
+//         case 0: case 1:
+//           if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
+//           break;
+//         case 2: // entering date
+//           if(currentHoriMenuSelection == 0) // entering month
+//           {
+//             if(currentVertMenuSelection < 0) currentVertMenuSelection = 11; // wrap around
+//             manualMonth = currentVertMenuSelection + 1;
+//           }
+//           else if(currentHoriMenuSelection == 1) // entering day
+//           {
+//             if(currentVertMenuSelection < 0)
+//             {
+//               switch(manualMonth)
+//               {
+//                 case 4: case 6: case 9: case 11: // April, June, September, November
+//                   currentVertMenuSelection = 29;
+//                   break;
+//                 case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
+//                   currentVertMenuSelection = 30;
+//                   break;
+//                 case 2:
+//                   if(manualYear % 4 == 0) // leap year
+//                   {
+//                     currentVertMenuSelection = 28;
+//                   }
+//                   else
+//                   {
+//                     currentVertMenuSelection = 27;
+//                   }
+//               }
+//             }
+//             manualDay = currentVertMenuSelection + 1;
+//           }
+//           else if(currentHoriMenuSelection == 2) // entering year
+//           {
+//             if(currentVertMenuSelection > 2099)
+//             {
+//               currentVertMenuSelection = CUR_YEAR;
+//             }
+//             else if(currentVertMenuSelection < CUR_YEAR)
+//             {
+//               currentVertMenuSelection = CUR_YEAR;
+//             }
+//             manualYear = currentVertMenuSelection;
+//           }
+//           break;
+//         case 3: // entering time
+//           if(currentHoriMenuSelection == 0) // hour
+//           {
+//             if(currentVertMenuSelection < 0) currentVertMenuSelection = 23;
+//             manualHour = currentVertMenuSelection;
+//           }
+//           else if(currentHoriMenuSelection == 1) // minute
+//           {
+//             if(currentVertMenuSelection < 0)
+//             {
+//               currentVertMenuSelection = 59;
+//               manualHour--;
+//               if(manualHour > 200) manualHour = 23;
+//             }
+//             manualMinute = currentVertMenuSelection;
+//           }
+//           break;
+//         case 4:
+//           if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
+//           if(currentVertMenuSelection % 12 == 11)
+//           {
+//             scroll--;
+//             if(scroll < 0) scroll = 0;
+//           }
+//       }
+//       #ifdef DEBUG_PRINT
+//       Serial.print("Current vert menu selection: ");
+//       Serial.println(currentVertMenuSelection);
+//       #endif
+//     }
+//   }
+
+//   if(encLeftPosition > encLeftOldPosition + 2)
+//   {
+//     #ifdef DEBUG_PRINT
+//     Serial.println("Left knob turned cw");
+//     Serial.println(encLeftPosition);
+//     #endif
+//     encLeftOldPosition = encLeftPosition;
+
+//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
+//     {
+//       prevMenuMillis = curMillis;
+//       if(page == 2 || page == 3) // date or time entry
+//       {
+//         currentHoriMenuSelection++;
+//         if(page == 2) // date entry
+//         {
+//           if(currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
+
+//           if(currentHoriMenuSelection == 0) // month
+//           {
+//             currentVertMenuSelection = manualMonth - 1;
+//           }
+//           else if(currentHoriMenuSelection == 1) // day
+//           {
+//             currentVertMenuSelection = manualDay - 1;
+//           }
+//           else if(currentHoriMenuSelection == 2) // year
+//           {
+//             currentVertMenuSelection = manualYear;
+//           }
+//         }
+//         else if(page == 3)
+//         {
+//           if(currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
+
+//           if(currentHoriMenuSelection == 0) // hour
+//           {
+//             currentVertMenuSelection = manualHour;
+//           }
+//           else if(currentHoriMenuSelection == 1) // minute
+//           {
+//             currentVertMenuSelection = manualMinute;
+//           }
+//         }
+//       }
+//       #ifdef DEBUG_PRINT
+//       Serial.print("Current hori menu selection: ");
+//       Serial.println(currentHoriMenuSelection);
+//       #endif
+//     }
+//   }
+//   else if(encLeftPosition < encLeftOldPosition - 2)
+//   {
+//     #ifdef DEBUG_PRINT
+//     Serial.println("Left knob turned ccw");
+//     Serial.println(encLeftPosition);
+//     #endif
+//     encLeftOldPosition = encLeftPosition;
+
+//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
+//     {
+//       currentHoriMenuSelection--;
+//       if(page == 2) // date entry
+//       {
+//         if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+
+//         if(currentHoriMenuSelection == 0) // month
+//         {
+//           currentVertMenuSelection = manualMonth - 1;
+//         }
+//         else if(currentHoriMenuSelection == 1) // day
+//         {
+//           currentVertMenuSelection = manualDay - 1;
+//         }
+//         else if(currentHoriMenuSelection == 2) // year
+//         {
+//           currentVertMenuSelection = manualYear;
+//         }
+//       }
+//       else if(page == 3) // time entry
+//       {
+//         if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+
+//         if(currentHoriMenuSelection == 0) // hour
+//         {
+//           currentVertMenuSelection = manualHour;
+//         }
+//         else if(currentHoriMenuSelection == 1) // minute
+//         {
+//           currentVertMenuSelection = manualMinute;
+//         }
+//       }
+//       #ifdef DEBUG_PRINT
+//       Serial.print("Current hori menu selection: ");
+//       Serial.println(currentHoriMenuSelection);
+//       #endif
+//     }
+//   }
+// }
+
+void updateMenuSelection() {
+    long encRightPosition = encRight.getPosition();
+    long encLeftPosition = encLeft.getPosition();
+
+    // Right Encoder Logic
+    if (encRightPosition > encRightOldPosition + 2) { // Clockwise rotation
+        encRightOldPosition = encRightPosition;
+
+        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+            prevMenuMillis = curMillis;
+            prevVertMenuSelection = currentVertMenuSelection;
+            currentVertMenuSelection++;
+
+            switch (page) {
+                case 0: case 1: // Initial menus
+                    if (currentVertMenuSelection > 1) currentVertMenuSelection = 1;
+                    break;
+                case 2: // Date entry
+                    if (currentHoriMenuSelection == 1) { // Month
+                        if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
+                        manualMonth = currentVertMenuSelection + 1;
+                    } else if (currentHoriMenuSelection == 0) { // Day
+                        switch (manualMonth) {
+                            case 4: case 6: case 9: case 11:
+                                if (currentVertMenuSelection > 29) currentVertMenuSelection = 0;
+                                break;
+                            case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+                                if (currentVertMenuSelection > 30) currentVertMenuSelection = 0;
+                                break;
+                            case 2:
+                                if (manualYear % 4 == 0) {
+                                    if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+                                } else {
+                                    if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+                                }
+                                break;
+                        }
+                        manualDay = currentVertMenuSelection + 1;
+                    } else if (currentHoriMenuSelection == 2) { // Year
+                        if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR;
+                        if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
+                        manualYear = currentVertMenuSelection;
+                    }
+                    break;
+                case 3: // Time entry
+                    if (currentHoriMenuSelection == 0) { // Hour
+                        if (currentVertMenuSelection > 23) currentVertMenuSelection = 0;
+                        manualHour = currentVertMenuSelection;
+                    } else if (currentHoriMenuSelection == 1) { // Minute
+                        if (currentVertMenuSelection > 59) {
+                            currentVertMenuSelection = 0;
+                            manualHour = (manualHour + 1) % 24;
+                        }
+                        manualMinute = currentVertMenuSelection;
+                    }
+                    break;
+                case 4: // File selection
+                    if (currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
+                    if (currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection) {
+                        scroll++;
+                    }
+                    break;
             }
-            manualDay = currentVertMenuSelection + 1;
-          }
-          else if(currentHoriMenuSelection == 2) // year
-          {
-            if(currentVertMenuSelection > 2099) 
-            {
-              currentVertMenuSelection = CUR_YEAR;
+        }
+    } else if (encRightPosition < encRightOldPosition - 2) { // Counterclockwise rotation
+        encRightOldPosition = encRightPosition;
+
+        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+            prevMenuMillis = curMillis;
+            prevVertMenuSelection = currentVertMenuSelection;
+            currentVertMenuSelection--;
+
+            switch (page) {
+                case 0: case 1:
+                    if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
+                    break;
+                case 2: // Date entry
+                    if (currentHoriMenuSelection == 1) { // Month
+                        if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
+                        manualMonth = currentVertMenuSelection + 1;
+                    } else if (currentHoriMenuSelection == 0) { // Day
+                        if (currentVertMenuSelection < 0) {
+                            switch (manualMonth) {
+                                case 4: case 6: case 9: case 11:
+                                    currentVertMenuSelection = 29;
+                                    break;
+                                case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+                                    currentVertMenuSelection = 30;
+                                    break;
+                                case 2:
+                                    currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27;
+                                    break;
+                            }
+                        }
+                        manualDay = currentVertMenuSelection + 1;
+                    } else if (currentHoriMenuSelection == 2) { // Year
+                        if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
+                        manualYear = currentVertMenuSelection;
+                    }
+                    break;
+                case 3: // Time entry
+                    if (currentHoriMenuSelection == 0) { // Hour
+                        if (currentVertMenuSelection < 0) currentVertMenuSelection = 23;
+                        manualHour = currentVertMenuSelection;
+                    } else if (currentHoriMenuSelection == 1) { // Minute
+                        if (currentVertMenuSelection < 0) {
+                            currentVertMenuSelection = 59;
+                            manualHour = (manualHour > 0) ? manualHour - 1 : 23;
+                        }
+                        manualMinute = currentVertMenuSelection;
+                    }
+                    break;
+                case 4:
+                    if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
+                    if (currentVertMenuSelection % 12 == 11) scroll--;
+                    if (scroll < 0) scroll = 0;
+                    break;
             }
-            else if(currentVertMenuSelection < CUR_YEAR)
-            {
-              currentVertMenuSelection = CUR_YEAR;
-            }
-            manualYear = currentVertMenuSelection;
-          }
-          break;
-        case 3: // entering time
-          if(currentHoriMenuSelection == 0) // hour
-          {
-            if(currentVertMenuSelection > 23) currentVertMenuSelection = 0;
-            manualHour = currentVertMenuSelection;
-          }
-          else if(currentHoriMenuSelection == 1) // minute
-          {
-            if(currentVertMenuSelection > 59)
-            {
-              currentVertMenuSelection = 0;
-              manualHour++;
-              if(manualHour > 23) manualHour = 0;
-            }
-            manualMinute = currentVertMenuSelection;
-          }
-          break;
-        case 4: // selecting file from SD card
-          if(currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
-          if(currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection)
-          {
-            scroll++;
-          }
-          break;
-      }
-      #ifdef DEBUG_PRINT
-      Serial.print("Current vert menu selection: ");
-      Serial.println(currentVertMenuSelection);
-      #endif
+        }
     }
-  }
-  else if (encRightPosition < encRightOldPosition - 2) // counterclockwise, go up
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Right knob turned ccw");
-    #endif
-    encRightOldPosition = encRightPosition;
 
-    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
-    {
-      prevMenuMillis = curMillis;
-      prevVertMenuSelection = currentVertMenuSelection;
-      currentVertMenuSelection--;
-      switch(page)
-      {
-        case 0: case 1:
-          if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
-          break;
-        case 2: // entering date
-          if(currentHoriMenuSelection == 0) // entering month
-          {
-            if(currentVertMenuSelection < 0) currentVertMenuSelection = 11; // wrap around
-            manualMonth = currentVertMenuSelection + 1;
-          }
-          else if(currentHoriMenuSelection == 1) // entering day
-          {
-            if(currentVertMenuSelection < 0)
-            {
-              switch(manualMonth)
-              {
-                case 4: case 6: case 9: case 11: // April, June, September, November
-                  currentVertMenuSelection = 29;
-                  break;
-                case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
-                  currentVertMenuSelection = 30;
-                  break;
-                case 2:
-                  if(manualYear % 4 == 0) // leap year
-                  {
-                    currentVertMenuSelection = 28;
-                  }
-                  else
-                  {
-                    currentVertMenuSelection = 27;
-                  }
-              }
+    // Left Encoder Logic
+    if (encLeftPosition > encLeftOldPosition + 2) { // Clockwise rotation
+        encLeftOldPosition = encLeftPosition;
+
+        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+            prevMenuMillis = curMillis;
+
+            if (page == 2 || page == 3) { // Date or Time entry
+                currentHoriMenuSelection++;
+                if (page == 2 && currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
+                if (page == 3 && currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
             }
-            manualDay = currentVertMenuSelection + 1;
-          }
-          else if(currentHoriMenuSelection == 2) // entering year
-          {
-            if(currentVertMenuSelection > 2099)
-            {
-              currentVertMenuSelection = CUR_YEAR;
-            }
-            else if(currentVertMenuSelection < CUR_YEAR)
-            {
-              currentVertMenuSelection = CUR_YEAR;
-            }
-            manualYear = currentVertMenuSelection;
-          }
-          break;
-        case 3: // entering time
-          if(currentHoriMenuSelection == 0) // hour
-          {
-            if(currentVertMenuSelection < 0) currentVertMenuSelection = 23;
-            manualHour = currentVertMenuSelection;
-          }
-          else if(currentHoriMenuSelection == 1) // minute
-          {
-            if(currentVertMenuSelection < 0)
-            {
-              currentVertMenuSelection = 59;
-              manualHour--;
-              if(manualHour > 200) manualHour = 23;
-            }
-            manualMinute = currentVertMenuSelection;
-          }
-          break;
-        case 4:
-          if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
-          if(currentVertMenuSelection % 12 == 11)
-          {
-            scroll--;
-            if(scroll < 0) scroll = 0;
-          }
-      }
-      #ifdef DEBUG_PRINT
-      Serial.print("Current vert menu selection: ");
-      Serial.println(currentVertMenuSelection);
-      #endif
+        }
+    } else if (encLeftPosition < encLeftOldPosition - 2) { // Counterclockwise rotation
+        encLeftOldPosition = encLeftPosition;
+
+        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+            prevMenuMillis = curMillis;
+
+            currentHoriMenuSelection--;
+            if (currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+        }
     }
-  }
-
-  if(encLeftPosition > encLeftOldPosition + 2)
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Left knob turned cw");
-    Serial.println(encLeftPosition);
-    #endif
-    encLeftOldPosition = encLeftPosition;
-
-    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
-    {
-      prevMenuMillis = curMillis;
-      if(page == 2 || page == 3) // date or time entry
-      {
-        currentHoriMenuSelection++;
-        if(page == 2) // date entry
-        {
-          if(currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
-
-          if(currentHoriMenuSelection == 0) // month
-          {
-            currentVertMenuSelection = manualMonth - 1;
-          }
-          else if(currentHoriMenuSelection == 1) // day
-          {
-            currentVertMenuSelection = manualDay - 1;
-          }
-          else if(currentHoriMenuSelection == 2) // year
-          {
-            currentVertMenuSelection = manualYear;
-          }
-        }
-        else if(page == 3)
-        {
-          if(currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
-
-          if(currentHoriMenuSelection == 0) // hour
-          {
-            currentVertMenuSelection = manualHour;
-          }
-          else if(currentHoriMenuSelection == 1) // minute
-          {
-            currentVertMenuSelection = manualMinute;
-          }
-        }
-      }
-      #ifdef DEBUG_PRINT
-      Serial.print("Current hori menu selection: ");
-      Serial.println(currentHoriMenuSelection);
-      #endif
-    }
-  }
-  else if(encLeftPosition < encLeftOldPosition - 2)
-  {
-    #ifdef DEBUG_PRINT
-    Serial.println("Left knob turned ccw");
-    Serial.println(encLeftPosition);
-    #endif
-    encLeftOldPosition = encLeftPosition;
-
-    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
-    {
-      currentHoriMenuSelection--;
-      if(page == 2) // date entry
-      {
-        if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
-
-        if(currentHoriMenuSelection == 0) // month
-        {
-          currentVertMenuSelection = manualMonth - 1;
-        }
-        else if(currentHoriMenuSelection == 1) // day
-        {
-          currentVertMenuSelection = manualDay - 1;
-        }
-        else if(currentHoriMenuSelection == 2) // year
-        {
-          currentVertMenuSelection = manualYear;
-        }
-      }
-      else if(page == 3) // time entry
-      {
-        if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
-
-        if(currentHoriMenuSelection == 0) // hour
-        {
-          currentVertMenuSelection = manualHour;
-        }
-        else if(currentHoriMenuSelection == 1) // minute
-        {
-          currentVertMenuSelection = manualMinute;
-        }
-      }
-      #ifdef DEBUG_PRINT
-      Serial.print("Current hori menu selection: ");
-      Serial.println(currentHoriMenuSelection);
-      #endif
-    }
-  }
 }
 
 // function for displaying various pages/menus
@@ -1990,61 +2180,104 @@ void displayPage(uint8_t page)
       updateDisplay("Timestamp method?", 32, false);
       if (currentVertMenuSelection == 0)        
       {
-        // updateDisplay("Auto (GPS)\n", 44, true);        //12
-        updateDisplay("Manual Entry", 44, true);             //52
+        updateDisplay("Auto (GPS)\n", 44, true);        //12
+        updateDisplay("Manual Entry", 52, false);             //52
         // updateDisplay("Auto (GPS)\n", 12, true);
         // updateDisplay("Manual", 20, false); 
       }
       else if (currentVertMenuSelection == 1)
       {
-        // updateDisplay("Auto (GPS)\n", 44, false);      //12
-        updateDisplay("Manual Entry", 44, true);     //52
+        updateDisplay("Auto (GPS)\n", 44, false);      //12
+        updateDisplay("Manual Entry", 52, true);     //52
         // updateDisplay("Auto (GPS)\n", 12, false);      //12
         // updateDisplay("Manual", 20, true);
       }
       break;
     }
-    case(2): // Date entry
-    {
-      // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
-      // updateDisplay("Enter date", 0, false);
-      display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
-      updateDisplay("Enter date", 30, false);    // 0
+    // case(2): // Date entry
+    // {
+    //   // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
+    //   // updateDisplay("Enter date", 0, false);
+    //   display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
+    //   updateDisplay("Enter date", 30, false);    // 0
 
-      char displayMonth[3];
-      char displayDay[3];
-      char displayYear[5];
+    //   char displayMonth[3];
+    //   char displayDay[3];
+    //   char displayYear[5];
 
-      itoa(manualMonth, displayMonth, 10);
-      itoa(manualDay, displayDay, 10);
-      itoa(manualYear, displayYear, 10);
+    //   itoa(manualMonth, displayMonth, 10);
+    //   itoa(manualDay, displayDay, 10);
+    //   itoa(manualYear, displayYear, 10);
 
-      display.setTextSize(2);
-      display.setCursor(0, 56);
-      // display.setTextSize(1);
-      // display.setCursor(0, 10);
+    //   display.setTextSize(2);
+    //   display.setCursor(0, 56);
+    //   // display.setTextSize(1);
+    //   // display.setCursor(0, 10);
 
-      if(currentHoriMenuSelection == 0) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-      if(manualMonth < 10) display.print('0');
-      display.print(manualMonth);
+    //   if(currentHoriMenuSelection == 0) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+    //   if(manualMonth < 10) display.print('0');
+    //   display.print(manualMonth);
 
-      display.setTextColor(LCD_FOREGROUND);
-      display.print('/');
+    //   display.setTextColor(LCD_FOREGROUND);
+    //   display.print('/');
 
-      if(currentHoriMenuSelection == 1) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-      if(manualDay < 10) display.print('0');
-      display.print(manualDay);
+    //   if(currentHoriMenuSelection == 1) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+    //   if(manualDay < 10) display.print('0');
+    //   display.print(manualDay);
 
-      display.setTextColor(LCD_FOREGROUND);
-      display.print('/');
+    //   display.setTextColor(LCD_FOREGROUND);
+    //   display.print('/');
 
-      if(currentHoriMenuSelection == 2) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-      display.print(manualYear);
+    //   if(currentHoriMenuSelection == 2) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+    //   display.print(manualYear);
 
-      display.setTextColor(LCD_FOREGROUND);
-      display.setTextSize(1);
-      break;
-    }
+    //   display.setTextColor(LCD_FOREGROUND);
+    //   display.setTextSize(1);
+    //   break;
+    // }
+
+    case (2): // Date entry
+{
+    display.drawLine(0, 42, display.width() - 1, 42, LCD_FOREGROUND);
+    updateDisplay("Enter date", 30, false);
+
+    char displayDay[3];
+    char displayMonth[3];
+    char displayYear[5];
+
+    itoa(manualDay, displayDay, 10);
+    itoa(manualMonth, displayMonth, 10);
+    itoa(manualYear, displayYear, 10);
+
+    display.setTextSize(2);
+    display.setCursor(0, 56);
+
+    if (currentHoriMenuSelection == 0) 
+        display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+    if (manualDay < 10) 
+        display.print('0');
+    display.print(manualDay);
+
+    display.setTextColor(LCD_FOREGROUND);
+    display.print('/');
+
+    if (currentHoriMenuSelection == 1) 
+        display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+    if (manualMonth < 10) 
+        display.print('0');
+    display.print(manualMonth);
+
+    display.setTextColor(LCD_FOREGROUND);
+    display.print('/');
+
+    if (currentHoriMenuSelection == 2) 
+        display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+    display.print(manualYear);
+
+    display.setTextColor(LCD_FOREGROUND);
+    display.setTextSize(1);
+    break;
+}
     case(3): // Time entry
     {
       // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
@@ -2162,19 +2395,40 @@ void displayPage(uint8_t page)
             timeSetOnce = true;  // User has manually set the time
         }
         // Use TimeLib's time functions to get time components
-        itoa(hour(), hourText, 10);
-        itoa(minute(), minuteText, 10);
-        itoa(month(), monthText, 10);
-        itoa(day(), dayText, 10);
-        itoa(year(), yearText, 10);
+        utcYear = year();       // Returns the year (e.g., 2024)
+        utcMonth = month();     // Returns the month (1 = January, 12 = December)
+        utcDay = day();         // Returns the day of the month
+        utcHour = hour();       // Returns the current hour (0-23)
+        utcMinute = minute();   // Returns the current minute (0-59)
+        utcSecond = second();    // Returns the current second (0-59)
+
+        // itoa(hour(), hourText, 10);
+        // itoa(minute(), minuteText, 10);
+        // itoa(month(), monthText, 10);
+        // itoa(day(), dayText, 10);
+        // itoa(year(), yearText, 10);
       }
       else {
-        itoa(gps.time.hour(), hourText, 10);
-        itoa(gps.time.minute(), minuteText, 10);
-        itoa(gps.date.month(), monthText, 10);
-        itoa(gps.date.day(), dayText, 10);
-        itoa(gps.date.year(), yearText, 10);
+
+        utcYear = gps.date.year();       // Returns the year (e.g., 2024)
+        utcMonth = gps.date.month();     // Returns the month (1 = January, 12 = December)
+        utcDay = gps.date.day();         // Returns the day of the month
+        utcHour = gps.time.hour();       // Returns the current hour (0-23)
+        utcMinute = gps.time.minute();   // Returns the current minute (0-59)
+        // utcSecond = second();    // Returns the current second (0-59)
+
+        // itoa(gps.time.hour(), hourText, 10);
+        // itoa(gps.time.minute(), minuteText, 10);
+        // itoa(gps.date.month(), monthText, 10);
+        // itoa(gps.date.day(), dayText, 10);
+        // itoa(gps.date.year(), yearText, 10);
       }
+
+      itoa(utcHour, hourText, 10);
+      itoa(utcMinute, minuteText, 10);
+      itoa(utcMonth, monthText, 10);
+      itoa(utcDay, dayText, 10);
+      itoa(utcYear, yearText, 10);
 
       display.setTextSize(2);   //2
       // display.setTextSize(2);
@@ -2200,29 +2454,16 @@ void displayPage(uint8_t page)
       strcat(timeText, "/");
       strcat(timeText, yearText);
       strcat(timeText, " ");
-      if (!gpsAwake) {
-        if(hour() < 10)
+      
+      if(utcHour < 10)
           strcat(timeText, "0");
-      }
-      else {
-        // toggleGps;
-        if(gps.time.hour() < 10)
-          strcat(timeText, "0");
-
-      }
       strcat(timeText, hourText);
       strcat(timeText, ":");
       
-      if(!gpsAwake){
-      if(manualMinute < 10)
+    if(utcMinute < 10)
         strcat(timeText, "0");
-      }
-      else{
-        // toggleGps;
-        if(gps.time.minute() < 10)
-          strcat(timeText, "0");
-      }
-      strcat(timeText, minuteText);
+    strcat(timeText, minuteText);
+      
       if(gpsDisplayFail || manualTimeEntry) strcat(timeText, " ");
       else strcat(timeText, "(GPS)");
       updateDisplay(timeText, 118, false);
