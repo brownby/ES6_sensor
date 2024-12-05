@@ -1562,16 +1562,17 @@ void createDataFiles()
         // rtc.setSeconds(gps.time.second());
 
         // GPS data is valid, set RTC using ESP32Time methods
-        rtc.setTime(gps.time.second(), gps.time.minute(), gps.time.hour(), 
-                gps.date.day(), gps.date.month(), gps.date.year());
+        // rtc.setTime(gps.time.second(), gps.time.minute(), gps.time.hour(), 
+        //         gps.date.day(), gps.date.month(), gps.date.year());
 
-        if(!rtcSet) rtcSet = true;
+         if(!rtcSet) rtcSet = true;
 
         break;
       
       }
       // else{
-      //   rtc.setTime(manualsecond, manualMinute, manualHour, manualDay, manualMonth, manualYear);
+      //   // setTime(manualHour, manualMinute, manualsecond, manualDay, manualMonth, manualYear);
+      //   // rtc.setTime(manualsecond, manualMinute, manualHour, manualDay, manualMonth, manualYear);
       // }
 
       // make GPS reads interruptible by the button being pressed
@@ -1594,10 +1595,10 @@ void createDataFiles()
   }
 
   // put GPS to sleep if it's woken up
-  if(gpsAwake)
-  {
-    toggleGps();
-  }
+  // if(gpsAwake)
+  // {
+  //   toggleGps();
+  // }
 
 // Get current time from RTC
 int year; 
@@ -1607,24 +1608,42 @@ int hour;
 int minutes;
 int seconds;
 
-if(gpsAwake)
+  // // strings to concatenate into file names
+  // char yearStr[3];
+  // char monthStr[3];
+  // char dayStr[3];
+  // char hourStr[3];
+  // char minutesStr[3];
+  // char secondsStr[3];
+  // char baseString[15]; // YYMMDD_HHMMSS_
+
+
+if(!gpsAwake)
 {
-  toggleGps;
-  year = rtc.getYear();
-  month = rtc.getMonth();
-  day = rtc.getDay();
-  hour = rtc.getHour();
-  minutes = rtc.getMinute();
-  seconds = rtc.getSecond();
-}
-else
-{
+  // toggleGps;
+  // year = rtc.getYear();
+  // month = rtc.getMonth();
+  // day = rtc.getDay();
+  // hour = rtc.getHour();
+  // minutes = rtc.getMinute();
+  // seconds = rtc.getSecond();
   year = manualYear;
   month  = manualMonth;
   day = manualDay;
   hour = manualHour;
   minutes = manualMinute;
   seconds = second();
+}
+else
+{
+  readGps();
+  year = gps.date.year();
+  month = gps.date.month();
+  day = gps.date.day();
+  hour = gps.time.hour();
+  minutes = gps.time.minute();
+  seconds = gps.time.second();
+  // toggleGps();
 }
 // Build the filename using String class
 String fileNameSeed = String(year) + (month < 10 ? "0" : "") + String(month) +
@@ -1993,32 +2012,59 @@ void updateMenuSelection() {
                     if (currentVertMenuSelection > 1) currentVertMenuSelection = 1;
                     break;
                 case 2: // Date entry
-                    if (currentHoriMenuSelection == 1) { // Month
-                        if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
-                        manualMonth = currentVertMenuSelection + 1;
-                    } else if (currentHoriMenuSelection == 0) { // Day
-                        switch (manualMonth) {
-                            case 4: case 6: case 9: case 11:
-                                if (currentVertMenuSelection > 29) currentVertMenuSelection = 0;
-                                break;
-                            case 1: case 3: case 5: case 7: case 8: case 10: case 12:
-                                if (currentVertMenuSelection > 30) currentVertMenuSelection = 0;
-                                break;
-                            case 2:
-                                if (manualYear % 4 == 0) {
-                                    if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
-                                } else {
-                                    if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
-                                }
-                                break;
-                        }
-                        manualDay = currentVertMenuSelection + 1;
-                    } else if (currentHoriMenuSelection == 2) { // Year
-                        if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR;
-                        if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
-                        manualYear = currentVertMenuSelection;
-                    }
-                    break;
+                      if (currentHoriMenuSelection == 0) { // Day
+                        switch (manualMonth) { // Validate based on the current month
+                          case 4: case 6: case 9: case 11: // Months with 30 days
+                            if (currentVertMenuSelection > 29) currentVertMenuSelection = 0; // Reset if out of range
+                              break;
+                          case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Months with 31 days
+                              if (currentVertMenuSelection > 30) currentVertMenuSelection = 0; // Reset if out of range
+                              break;
+                          case 2: // February
+                              if (manualYear % 4 == 0) { // Leap year
+                                  if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+                              } else { // Non-leap year
+                                  if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+                              }
+                              break;
+                      }
+                      manualDay = currentVertMenuSelection + 1; // Set the day (1-based index)
+                  } else if (currentHoriMenuSelection == 1) { // Month
+                      if (currentVertMenuSelection > 11) currentVertMenuSelection = 0; // Reset if out of range
+                      manualMonth = currentVertMenuSelection + 1; // Set the month (1-based index)
+                  } else if (currentHoriMenuSelection == 2) { // Year
+                      if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR; // Upper limit
+                      if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR; // Lower limit
+                      manualYear = currentVertMenuSelection; // Set the year
+                  }
+                  break;
+
+                    // if (currentHoriMenuSelection == 0) { // Month
+                    //     if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
+                    //     manualMonth = currentVertMenuSelection + 1;
+                    // } else if (currentHoriMenuSelection == 1) { // Day
+                    //     switch (manualMonth) {
+                    //         case 4: case 6: case 9: case 11:
+                    //             if (currentVertMenuSelection > 29) currentVertMenuSelection = 0;
+                    //             break;
+                    //         case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+                    //             if (currentVertMenuSelection > 30) currentVertMenuSelection = 0;
+                    //             break;
+                    //         case 2:
+                    //             if (manualYear % 4 == 0) {
+                    //                 if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+                    //             } else {
+                    //                 if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+                    //             }
+                    //             break;
+                    //     }
+                    //     manualDay = currentVertMenuSelection + 1;
+                    // } else if (currentHoriMenuSelection == 2) { // Year
+                    //     if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR;
+                    //     if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
+                    //     manualYear = currentVertMenuSelection;
+                    // }
+                    // break;
                 case 3: // Time entry
                     if (currentHoriMenuSelection == 0) { // Hour
                         if (currentVertMenuSelection > 23) currentVertMenuSelection = 0;
@@ -2052,29 +2098,53 @@ void updateMenuSelection() {
                     if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
                     break;
                 case 2: // Date entry
-                    if (currentHoriMenuSelection == 1) { // Month
-                        if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
-                        manualMonth = currentVertMenuSelection + 1;
-                    } else if (currentHoriMenuSelection == 0) { // Day
-                        if (currentVertMenuSelection < 0) {
-                            switch (manualMonth) {
-                                case 4: case 6: case 9: case 11:
-                                    currentVertMenuSelection = 29;
-                                    break;
-                                case 1: case 3: case 5: case 7: case 8: case 10: case 12:
-                                    currentVertMenuSelection = 30;
-                                    break;
-                                case 2:
-                                    currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27;
-                                    break;
-                            }
-                        }
-                        manualDay = currentVertMenuSelection + 1;
-                    } else if (currentHoriMenuSelection == 2) { // Year
-                        if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
-                        manualYear = currentVertMenuSelection;
-                    }
-                    break;
+                    if (currentHoriMenuSelection == 0) { // Day
+                      if (currentVertMenuSelection < 0) {
+                          switch (manualMonth) { // Validate and wrap around based on the current month
+                              case 4: case 6: case 9: case 11: // Months with 30 days
+                                  currentVertMenuSelection = 29; // Wrap to the last valid day
+                                  break;
+                              case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Months with 31 days
+                                  currentVertMenuSelection = 30; // Wrap to the last valid day
+                                  break;
+                              case 2: // February
+                                  currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27; // Leap year or not
+                                  break;
+                          }
+                      }
+                      manualDay = currentVertMenuSelection + 1; // Set the day (1-based index)
+                  } else if (currentHoriMenuSelection == 1) { // Month
+                      if (currentVertMenuSelection < 0) currentVertMenuSelection = 11; // Wrap to December
+                      manualMonth = currentVertMenuSelection + 1; // Set the month (1-based index)
+                  } else if (currentHoriMenuSelection == 2) { // Year
+                      if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR; // Ensure no year below the current year
+                      manualYear = currentVertMenuSelection; // Set the year
+                  }
+                  break;
+                  
+                    // if (currentHoriMenuSelection == 0) { // Month
+                    //     if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
+                    //     manualMonth = currentVertMenuSelection + 1;
+                    // } else if (currentHoriMenuSelection == 1) { // Day
+                    //     if (currentVertMenuSelection < 0) {
+                    //         switch (manualMonth) {
+                    //             case 4: case 6: case 9: case 11:
+                    //                 currentVertMenuSelection = 29;
+                    //                 break;
+                    //             case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+                    //                 currentVertMenuSelection = 30;
+                    //                 break;
+                    //             case 2:
+                    //                 currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27;
+                    //                 break;
+                    //         }
+                    //     }
+                    //     manualDay = currentVertMenuSelection + 1;
+                    // } else if (currentHoriMenuSelection == 2) { // Year
+                    //     if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
+                    //     manualYear = currentVertMenuSelection;
+                    // }
+                    // break;
                 case 3: // Time entry
                     if (currentHoriMenuSelection == 0) { // Hour
                         if (currentVertMenuSelection < 0) currentVertMenuSelection = 23;
@@ -2448,9 +2518,9 @@ void displayPage(uint8_t page)
       display.print("ug/m3");
       display.setTextSize(1);
 
-      strcpy(timeText, monthText);
+      strcpy(timeText, dayText);
       strcat(timeText, "/");
-      strcat(timeText, dayText);
+      strcat(timeText, monthText);
       strcat(timeText, "/");
       strcat(timeText, yearText);
       strcat(timeText, " ");
@@ -2466,7 +2536,9 @@ void displayPage(uint8_t page)
       
       if(gpsDisplayFail || manualTimeEntry) strcat(timeText, " ");
       else strcat(timeText, "(GPS)");
-      updateDisplay(timeText, 118, false);
+    display.setCursor(5, 118);
+    display.print(timeText);
+    // updateDisplay(timeText, 118, false);
       // updateDisplay(timeText, -20, false);
       break;
     }
