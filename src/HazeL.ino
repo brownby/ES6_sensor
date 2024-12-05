@@ -2039,10 +2039,17 @@ void updateMenuSelection() {
                   }
                   break;
 
+<<<<<<< Updated upstream
                     // if (currentHoriMenuSelection == 0) { // Month
                     //     if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
                     //     manualMonth = currentVertMenuSelection + 1;
                     // } else if (currentHoriMenuSelection == 1) { // Day
+=======
+                    // if (currentHoriMenuSelection == 1) { // Month
+                    //     if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
+                    //     manualMonth = currentVertMenuSelection + 1;
+                    // } else if (currentHoriMenuSelection == 0) { // Day
+>>>>>>> Stashed changes
                     //     switch (manualMonth) {
                     //         case 4: case 6: case 9: case 11:
                     //             if (currentVertMenuSelection > 29) currentVertMenuSelection = 0;
@@ -2122,10 +2129,17 @@ void updateMenuSelection() {
                   }
                   break;
                   
+<<<<<<< Updated upstream
                     // if (currentHoriMenuSelection == 0) { // Month
                     //     if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
                     //     manualMonth = currentVertMenuSelection + 1;
                     // } else if (currentHoriMenuSelection == 1) { // Day
+=======
+                    // if (currentHoriMenuSelection == 1) { // Month
+                    //     if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
+                    //     manualMonth = currentVertMenuSelection + 1;
+                    // } else if (currentHoriMenuSelection == 0) { // Day
+>>>>>>> Stashed changes
                     //     if (currentVertMenuSelection < 0) {
                     //         switch (manualMonth) {
                     //             case 4: case 6: case 9: case 11:
