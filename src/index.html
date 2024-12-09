@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+<<<<<<< Updated upstream
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time PM2.5 Plot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    canvas {
+      max-width: 800px;
+      margin: 20px auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time PM2.5 Plot</h1>
+  <canvas id="dataChart"></canvas>
+  <p>Loading data...</p>
+  
+  <script>
+    // Get the canvas element
+    const ctx = document.getElementById('dataChart').getContext('2d');
+
+    // Initialize the chart
+    const dataChart = new Chart(ctx, {
+      type: 'line', // Line chart
+      data: {
+        labels: [], // Timestamps (extracted from UTC_timestamp)
+        datasets: [
+          {
+            label: 'PM2.5 (µg/m³)', // Y-axis label
+            data: [],
+            borderColor: 'blue',
+            backgroundColor: 'rgba(0, 0, 255, 0.1)',
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: 'Time (HH:MM:SS)'
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'PM2.5 (µg/m³)'
+            }
+          }
+        }
+      }
+    });
+
+    // Function to fetch and update data from ESP32
+    async function fetchData() {
+      try {
+        const response = await fetch('/latest'); // Fetch the latest file data
+        if (!response.ok) {
+          console.error('Failed to fetch data:', response.status);
+          return;
+        }
+
+        const textData = await response.text(); // Read the data as text
+        const rows = textData.split('\n').filter(row => row.trim() !== ''); // Split by new lines and remove empty rows
+
+        rows.forEach((row, index) => {
+          if (index === 0) return; // Skip header
+          const columns = row.split('\t'); // Data is tab-separated
+          const utcTimestamp = columns[1]; // Second column is UTC_timestamp
+          const pm25 = parseFloat(columns[8]); // Ninth column is PM2.5
+
+          // Extract time from UTC_timestamp (after T)
+          const time = utcTimestamp.split('T')[1];
+
+          // Update chart labels and datasets
+          if (!dataChart.data.labels.includes(time)) {
+            dataChart.data.labels.push(time);
+            dataChart.data.datasets[0].data.push(pm25);
+            dataChart.update(); // Re-render the chart
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    }
+
+    // Update data every 2 seconds
+    setInterval(fetchData, 2000);
+=======
+  <title>Plot PM2.5 Data</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>PM2.5 vs Time</h1>
+  <canvas id="pm25Chart" width="400" height="200"></canvas>
+  
+  <script>
+    // Fetch the data from the ESP32 web server
+    fetch('/plot')
+      .then(response => response.json())
+      .then(data => {
+        let timestamps = [];
+        let pm25Values = [];
+        
+        // Process the JSON data to extract the timestamps and PM2.5 values
+        data.forEach(item => {
+          timestamps.push(item.timestamp);
+          pm25Values.push(item.PM25);
+        });
+
+        // Plot the graph using Chart.js
+        var ctx = document.getElementById('pm25Chart').getContext('2d');
+        var chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: timestamps, // X-axis: timestamps
+            datasets: [{
+              label: 'PM2.5',
+              data: pm25Values, // Y-axis: PM2.5 values
+              borderColor: 'rgba(75, 192, 192, 1)',
+              fill: false
+            }]
+          },
+          options: {
+            scales: {
+              x: {
+                type: 'category',
+                title: {
+                  display: true,
+                  text: 'Time (HH:MM:SS)'
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'PM2.5 (µg/m³)'
+                }
+              }
+            }
+          }
+        });
+      })
+      .catch(error => console.error('Error fetching data:', error));
+>>>>>>> Stashed changes
+  </script>
+</body>
+</html>
