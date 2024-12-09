@@ -1,6 +1,6 @@
 /*
- * HazeL
- * Benjamin Y. Brown
+ * PM Tracker
+ * MUHAMMAD Nasir
  */
 
 #include <SPI.h>
@@ -252,7 +252,7 @@ void setup() {
 
 void initializeSDCard() {
   display.clearDisplay(LCD_BACKGROUND);
-  updateDisplay("Checking SD", 40, false);
+  updateDisplay("Checking SD Card", 40, false);
   display.display();
   delay(2500);
 
@@ -1701,509 +1701,495 @@ metaFileName = fileNameSeed + "_mata.csv";
 }
 
 // Update current menu selection based on encoders
-// void updateMenuSelection()
-// {
-//   long encRightPosition = encRight.getPosition();
-//   long encLeftPosition = encLeft.getPosition();
-//   //Serial.print("EncA"); Serial.print(encRightPosition);
-//   //Serial.print(", EncB"); Serial.println(encLeftPosition);
-//   #ifdef DEBUG_PRINT
-//   // Serial.print("Right encoder position: ");
-//   // Serial.println(encRightPosition);
-//   #endif
-//   if (encRightPosition > encRightOldPosition + 2) // clockwise, go down
-//   {
-//     #ifdef DEBUG_PRINT
-//     Serial.println("Right knob turned cw");
-//     #endif
-//     encRightOldPosition = encRightPosition;
+void updateMenuSelection()
+{
+  long encRightPosition = encRight.getPosition();
+  long encLeftPosition = encLeft.getPosition();
+  //Serial.print("EncA"); Serial.print(encRightPosition);
+  //Serial.print(", EncB"); Serial.println(encLeftPosition);
+  #ifdef DEBUG_PRINT
+  // Serial.print("Right encoder position: ");
+  // Serial.println(encRightPosition);
+  #endif
+  if (encRightPosition > encRightOldPosition + 2) // clockwise, go down
+  {
+    #ifdef DEBUG_PRINT
+    Serial.println("Right knob turned cw");
+    #endif
+    encRightOldPosition = encRightPosition;
 
-//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
-//     {
-//       prevMenuMillis = curMillis;
-//       prevVertMenuSelection = currentVertMenuSelection;
-//       currentVertMenuSelection++;
-//       switch (page)
-//       {
-//         case 0: case 1: // initial two menus
-//           if(currentVertMenuSelection > 1) currentVertMenuSelection = 1; // only two choices on these pages
-//           break;
-//         case 2: // entering date
-//           if(currentHoriMenuSelection == 0) // month
-//           {
-//             if(currentVertMenuSelection > 11) currentVertMenuSelection = 0;
-//             manualMonth = currentVertMenuSelection + 1;
-//           }
-//           else if(currentHoriMenuSelection == 1) // day
-//           {
-//             switch(manualMonth)
-//             {
-//               case 4: case 6: case 9: case 11: // Apr, Jun, Sept, Nov
-//                 if(currentVertMenuSelection > 29) currentVertMenuSelection = 0;
-//                 break;
-//               case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
-//                 if(currentVertMenuSelection > 30) currentVertMenuSelection = 0;
-//                 break;
-//               case 2: // February
-//                 if(manualYear % 4 == 0) 
-//                 {
-//                   if(currentVertMenuSelection > 28) currentVertMenuSelection = 0;
-//                 }
-//                 else
-//                 {
-//                   if(currentVertMenuSelection > 27) currentVertMenuSelection = 0;
-//                 }
-//                 break;
-//             }
-//             manualDay = currentVertMenuSelection + 1;
-//           }
-//           else if(currentHoriMenuSelection == 2) // year
-//           {
-//             if(currentVertMenuSelection > 2099) 
-//             {
-//               currentVertMenuSelection = CUR_YEAR;
-//             }
-//             else if(currentVertMenuSelection < CUR_YEAR)
-//             {
-//               currentVertMenuSelection = CUR_YEAR;
-//             }
-//             manualYear = currentVertMenuSelection;
-//           }
-//           break;
-//         case 3: // entering time
-//           if(currentHoriMenuSelection == 0) // hour
-//           {
-//             if(currentVertMenuSelection > 23) currentVertMenuSelection = 0;
-//             manualHour = currentVertMenuSelection;
-//           }
-//           else if(currentHoriMenuSelection == 1) // minute
-//           {
-//             if(currentVertMenuSelection > 59)
-//             {
-//               currentVertMenuSelection = 0;
-//               manualHour++;
-//               if(manualHour > 23) manualHour = 0;
-//             }
-//             manualMinute = currentVertMenuSelection;
-//           }
-//           break;
-//         case 4: // selecting file from SD card
-//           if(currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
-//           if(currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection)
-//           {
-//             scroll++;
-//           }
-//           break;
-//       }
-//       #ifdef DEBUG_PRINT
-//       Serial.print("Current vert menu selection: ");
-//       Serial.println(currentVertMenuSelection);
-//       #endif
-//     }
-//   }
-//   else if (encRightPosition < encRightOldPosition - 2) // counterclockwise, go up
-//   {
-//     #ifdef DEBUG_PRINT
-//     Serial.println("Right knob turned ccw");
-//     #endif
-//     encRightOldPosition = encRightPosition;
-
-//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
-//     {
-//       prevMenuMillis = curMillis;
-//       prevVertMenuSelection = currentVertMenuSelection;
-//       currentVertMenuSelection--;
-//       switch(page)
-//       {
-//         case 0: case 1:
-//           if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
-//           break;
-//         case 2: // entering date
-//           if(currentHoriMenuSelection == 0) // entering month
-//           {
-//             if(currentVertMenuSelection < 0) currentVertMenuSelection = 11; // wrap around
-//             manualMonth = currentVertMenuSelection + 1;
-//           }
-//           else if(currentHoriMenuSelection == 1) // entering day
-//           {
-//             if(currentVertMenuSelection < 0)
-//             {
-//               switch(manualMonth)
-//               {
-//                 case 4: case 6: case 9: case 11: // April, June, September, November
-//                   currentVertMenuSelection = 29;
-//                   break;
-//                 case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
-//                   currentVertMenuSelection = 30;
-//                   break;
-//                 case 2:
-//                   if(manualYear % 4 == 0) // leap year
-//                   {
-//                     currentVertMenuSelection = 28;
-//                   }
-//                   else
-//                   {
-//                     currentVertMenuSelection = 27;
-//                   }
-//               }
-//             }
-//             manualDay = currentVertMenuSelection + 1;
-//           }
-//           else if(currentHoriMenuSelection == 2) // entering year
-//           {
-//             if(currentVertMenuSelection > 2099)
-//             {
-//               currentVertMenuSelection = CUR_YEAR;
-//             }
-//             else if(currentVertMenuSelection < CUR_YEAR)
-//             {
-//               currentVertMenuSelection = CUR_YEAR;
-//             }
-//             manualYear = currentVertMenuSelection;
-//           }
-//           break;
-//         case 3: // entering time
-//           if(currentHoriMenuSelection == 0) // hour
-//           {
-//             if(currentVertMenuSelection < 0) currentVertMenuSelection = 23;
-//             manualHour = currentVertMenuSelection;
-//           }
-//           else if(currentHoriMenuSelection == 1) // minute
-//           {
-//             if(currentVertMenuSelection < 0)
-//             {
-//               currentVertMenuSelection = 59;
-//               manualHour--;
-//               if(manualHour > 200) manualHour = 23;
-//             }
-//             manualMinute = currentVertMenuSelection;
-//           }
-//           break;
-//         case 4:
-//           if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
-//           if(currentVertMenuSelection % 12 == 11)
-//           {
-//             scroll--;
-//             if(scroll < 0) scroll = 0;
-//           }
-//       }
-//       #ifdef DEBUG_PRINT
-//       Serial.print("Current vert menu selection: ");
-//       Serial.println(currentVertMenuSelection);
-//       #endif
-//     }
-//   }
-
-//   if(encLeftPosition > encLeftOldPosition + 2)
-//   {
-//     #ifdef DEBUG_PRINT
-//     Serial.println("Left knob turned cw");
-//     Serial.println(encLeftPosition);
-//     #endif
-//     encLeftOldPosition = encLeftPosition;
-
-//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
-//     {
-//       prevMenuMillis = curMillis;
-//       if(page == 2 || page == 3) // date or time entry
-//       {
-//         currentHoriMenuSelection++;
-//         if(page == 2) // date entry
-//         {
-//           if(currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
-
-//           if(currentHoriMenuSelection == 0) // month
-//           {
-//             currentVertMenuSelection = manualMonth - 1;
-//           }
-//           else if(currentHoriMenuSelection == 1) // day
-//           {
-//             currentVertMenuSelection = manualDay - 1;
-//           }
-//           else if(currentHoriMenuSelection == 2) // year
-//           {
-//             currentVertMenuSelection = manualYear;
-//           }
-//         }
-//         else if(page == 3)
-//         {
-//           if(currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
-
-//           if(currentHoriMenuSelection == 0) // hour
-//           {
-//             currentVertMenuSelection = manualHour;
-//           }
-//           else if(currentHoriMenuSelection == 1) // minute
-//           {
-//             currentVertMenuSelection = manualMinute;
-//           }
-//         }
-//       }
-//       #ifdef DEBUG_PRINT
-//       Serial.print("Current hori menu selection: ");
-//       Serial.println(currentHoriMenuSelection);
-//       #endif
-//     }
-//   }
-//   else if(encLeftPosition < encLeftOldPosition - 2)
-//   {
-//     #ifdef DEBUG_PRINT
-//     Serial.println("Left knob turned ccw");
-//     Serial.println(encLeftPosition);
-//     #endif
-//     encLeftOldPosition = encLeftPosition;
-
-//     if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
-//     {
-//       currentHoriMenuSelection--;
-//       if(page == 2) // date entry
-//       {
-//         if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
-
-//         if(currentHoriMenuSelection == 0) // month
-//         {
-//           currentVertMenuSelection = manualMonth - 1;
-//         }
-//         else if(currentHoriMenuSelection == 1) // day
-//         {
-//           currentVertMenuSelection = manualDay - 1;
-//         }
-//         else if(currentHoriMenuSelection == 2) // year
-//         {
-//           currentVertMenuSelection = manualYear;
-//         }
-//       }
-//       else if(page == 3) // time entry
-//       {
-//         if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
-
-//         if(currentHoriMenuSelection == 0) // hour
-//         {
-//           currentVertMenuSelection = manualHour;
-//         }
-//         else if(currentHoriMenuSelection == 1) // minute
-//         {
-//           currentVertMenuSelection = manualMinute;
-//         }
-//       }
-//       #ifdef DEBUG_PRINT
-//       Serial.print("Current hori menu selection: ");
-//       Serial.println(currentHoriMenuSelection);
-//       #endif
-//     }
-//   }
-// }
-
-void updateMenuSelection() {
-    long encRightPosition = encRight.getPosition();
-    long encLeftPosition = encLeft.getPosition();
-
-    // Right Encoder Logic
-    if (encRightPosition > encRightOldPosition + 2) { // Clockwise rotation
-        encRightOldPosition = encRightPosition;
-
-        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
-            prevMenuMillis = curMillis;
-            prevVertMenuSelection = currentVertMenuSelection;
-            currentVertMenuSelection++;
-
-            switch (page) {
-                case 0: case 1: // Initial menus
-                    if (currentVertMenuSelection > 1) currentVertMenuSelection = 1;
-                    break;
-                case 2: // Date entry
-                      if (currentHoriMenuSelection == 0) { // Day
-                        switch (manualMonth) { // Validate based on the current month
-                          case 4: case 6: case 9: case 11: // Months with 30 days
-                            if (currentVertMenuSelection > 29) currentVertMenuSelection = 0; // Reset if out of range
-                              break;
-                          case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Months with 31 days
-                              if (currentVertMenuSelection > 30) currentVertMenuSelection = 0; // Reset if out of range
-                              break;
-                          case 2: // February
-                              if (manualYear % 4 == 0) { // Leap year
-                                  if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
-                              } else { // Non-leap year
-                                  if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
-                              }
-                              break;
-                      }
-                      manualDay = currentVertMenuSelection + 1; // Set the day (1-based index)
-                  } else if (currentHoriMenuSelection == 1) { // Month
-                      if (currentVertMenuSelection > 11) currentVertMenuSelection = 0; // Reset if out of range
-                      manualMonth = currentVertMenuSelection + 1; // Set the month (1-based index)
-                  } else if (currentHoriMenuSelection == 2) { // Year
-                      if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR; // Upper limit
-                      if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR; // Lower limit
-                      manualYear = currentVertMenuSelection; // Set the year
-                  }
-                  break;
-
-<<<<<<< Updated upstream
-                    // if (currentHoriMenuSelection == 0) { // Month
-                    //     if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
-                    //     manualMonth = currentVertMenuSelection + 1;
-                    // } else if (currentHoriMenuSelection == 1) { // Day
-=======
-                    // if (currentHoriMenuSelection == 1) { // Month
-                    //     if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
-                    //     manualMonth = currentVertMenuSelection + 1;
-                    // } else if (currentHoriMenuSelection == 0) { // Day
->>>>>>> Stashed changes
-                    //     switch (manualMonth) {
-                    //         case 4: case 6: case 9: case 11:
-                    //             if (currentVertMenuSelection > 29) currentVertMenuSelection = 0;
-                    //             break;
-                    //         case 1: case 3: case 5: case 7: case 8: case 10: case 12:
-                    //             if (currentVertMenuSelection > 30) currentVertMenuSelection = 0;
-                    //             break;
-                    //         case 2:
-                    //             if (manualYear % 4 == 0) {
-                    //                 if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
-                    //             } else {
-                    //                 if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
-                    //             }
-                    //             break;
-                    //     }
-                    //     manualDay = currentVertMenuSelection + 1;
-                    // } else if (currentHoriMenuSelection == 2) { // Year
-                    //     if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR;
-                    //     if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
-                    //     manualYear = currentVertMenuSelection;
-                    // }
-                    // break;
-                case 3: // Time entry
-                    if (currentHoriMenuSelection == 0) { // Hour
-                        if (currentVertMenuSelection > 23) currentVertMenuSelection = 0;
-                        manualHour = currentVertMenuSelection;
-                    } else if (currentHoriMenuSelection == 1) { // Minute
-                        if (currentVertMenuSelection > 59) {
-                            currentVertMenuSelection = 0;
-                            manualHour = (manualHour + 1) % 24;
-                        }
-                        manualMinute = currentVertMenuSelection;
-                    }
-                    break;
-                case 4: // File selection
-                    if (currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
-                    if (currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection) {
-                        scroll++;
-                    }
-                    break;
+    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
+    {
+      prevMenuMillis = curMillis;
+      prevVertMenuSelection = currentVertMenuSelection;
+      currentVertMenuSelection++;
+      switch (page)
+      {
+        case 0: case 1: // initial two menus
+          if(currentVertMenuSelection > 1) currentVertMenuSelection = 1; // only two choices on these pages
+          break;
+        case 2: // entering date
+          if(currentHoriMenuSelection == 0) // month
+          {
+            if(currentVertMenuSelection > 11) currentVertMenuSelection = 0;
+            manualMonth = currentVertMenuSelection + 1;
+          }
+          else if(currentHoriMenuSelection == 1) // day
+          {
+            switch(manualMonth)
+            {
+              case 4: case 6: case 9: case 11: // Apr, Jun, Sept, Nov
+                if(currentVertMenuSelection > 29) currentVertMenuSelection = 0;
+                break;
+              case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
+                if(currentVertMenuSelection > 30) currentVertMenuSelection = 0;
+                break;
+              case 2: // February
+                if(manualYear % 4 == 0) 
+                {
+                  if(currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+                }
+                else
+                {
+                  if(currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+                }
+                break;
             }
-        }
-    } else if (encRightPosition < encRightOldPosition - 2) { // Counterclockwise rotation
-        encRightOldPosition = encRightPosition;
-
-        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
-            prevMenuMillis = curMillis;
-            prevVertMenuSelection = currentVertMenuSelection;
-            currentVertMenuSelection--;
-
-            switch (page) {
-                case 0: case 1:
-                    if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
-                    break;
-                case 2: // Date entry
-                    if (currentHoriMenuSelection == 0) { // Day
-                      if (currentVertMenuSelection < 0) {
-                          switch (manualMonth) { // Validate and wrap around based on the current month
-                              case 4: case 6: case 9: case 11: // Months with 30 days
-                                  currentVertMenuSelection = 29; // Wrap to the last valid day
-                                  break;
-                              case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Months with 31 days
-                                  currentVertMenuSelection = 30; // Wrap to the last valid day
-                                  break;
-                              case 2: // February
-                                  currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27; // Leap year or not
-                                  break;
-                          }
-                      }
-                      manualDay = currentVertMenuSelection + 1; // Set the day (1-based index)
-                  } else if (currentHoriMenuSelection == 1) { // Month
-                      if (currentVertMenuSelection < 0) currentVertMenuSelection = 11; // Wrap to December
-                      manualMonth = currentVertMenuSelection + 1; // Set the month (1-based index)
-                  } else if (currentHoriMenuSelection == 2) { // Year
-                      if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR; // Ensure no year below the current year
-                      manualYear = currentVertMenuSelection; // Set the year
-                  }
-                  break;
-                  
-<<<<<<< Updated upstream
-                    // if (currentHoriMenuSelection == 0) { // Month
-                    //     if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
-                    //     manualMonth = currentVertMenuSelection + 1;
-                    // } else if (currentHoriMenuSelection == 1) { // Day
-=======
-                    // if (currentHoriMenuSelection == 1) { // Month
-                    //     if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
-                    //     manualMonth = currentVertMenuSelection + 1;
-                    // } else if (currentHoriMenuSelection == 0) { // Day
->>>>>>> Stashed changes
-                    //     if (currentVertMenuSelection < 0) {
-                    //         switch (manualMonth) {
-                    //             case 4: case 6: case 9: case 11:
-                    //                 currentVertMenuSelection = 29;
-                    //                 break;
-                    //             case 1: case 3: case 5: case 7: case 8: case 10: case 12:
-                    //                 currentVertMenuSelection = 30;
-                    //                 break;
-                    //             case 2:
-                    //                 currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27;
-                    //                 break;
-                    //         }
-                    //     }
-                    //     manualDay = currentVertMenuSelection + 1;
-                    // } else if (currentHoriMenuSelection == 2) { // Year
-                    //     if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
-                    //     manualYear = currentVertMenuSelection;
-                    // }
-                    // break;
-                case 3: // Time entry
-                    if (currentHoriMenuSelection == 0) { // Hour
-                        if (currentVertMenuSelection < 0) currentVertMenuSelection = 23;
-                        manualHour = currentVertMenuSelection;
-                    } else if (currentHoriMenuSelection == 1) { // Minute
-                        if (currentVertMenuSelection < 0) {
-                            currentVertMenuSelection = 59;
-                            manualHour = (manualHour > 0) ? manualHour - 1 : 23;
-                        }
-                        manualMinute = currentVertMenuSelection;
-                    }
-                    break;
-                case 4:
-                    if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
-                    if (currentVertMenuSelection % 12 == 11) scroll--;
-                    if (scroll < 0) scroll = 0;
-                    break;
+            manualDay = currentVertMenuSelection + 1;
+          }
+          else if(currentHoriMenuSelection == 2) // year
+          {
+            if(currentVertMenuSelection > 2099) 
+            {
+              currentVertMenuSelection = CUR_YEAR;
             }
-        }
+            else if(currentVertMenuSelection < CUR_YEAR)
+            {
+              currentVertMenuSelection = CUR_YEAR;
+            }
+            manualYear = currentVertMenuSelection;
+          }
+          break;
+        case 3: // entering time
+          if(currentHoriMenuSelection == 0) // hour
+          {
+            if(currentVertMenuSelection > 23) currentVertMenuSelection = 0;
+            manualHour = currentVertMenuSelection;
+          }
+          else if(currentHoriMenuSelection == 1) // minute
+          {
+            if(currentVertMenuSelection > 59)
+            {
+              currentVertMenuSelection = 0;
+              manualHour++;
+              if(manualHour > 23) manualHour = 0;
+            }
+            manualMinute = currentVertMenuSelection;
+          }
+          break;
+        case 4: // selecting file from SD card
+          if(currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
+          if(currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection)
+          {
+            scroll++;
+          }
+          break;
+      }
+      #ifdef DEBUG_PRINT
+      Serial.print("Current vert menu selection: ");
+      Serial.println(currentVertMenuSelection);
+      #endif
     }
+  }
+  else if (encRightPosition < encRightOldPosition - 2) // counterclockwise, go up
+  {
+    #ifdef DEBUG_PRINT
+    Serial.println("Right knob turned ccw");
+    #endif
+    encRightOldPosition = encRightPosition;
 
-    // Left Encoder Logic
-    if (encLeftPosition > encLeftOldPosition + 2) { // Clockwise rotation
-        encLeftOldPosition = encLeftPosition;
-
-        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
-            prevMenuMillis = curMillis;
-
-            if (page == 2 || page == 3) { // Date or Time entry
-                currentHoriMenuSelection++;
-                if (page == 2 && currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
-                if (page == 3 && currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
+    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME) // only update menu selection every 100ms
+    {
+      prevMenuMillis = curMillis;
+      prevVertMenuSelection = currentVertMenuSelection;
+      currentVertMenuSelection--;
+      switch(page)
+      {
+        case 0: case 1:
+          if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
+          break;
+        case 2: // entering date
+          if(currentHoriMenuSelection == 0) // entering month
+          {
+            if(currentVertMenuSelection < 0) currentVertMenuSelection = 11; // wrap around
+            manualMonth = currentVertMenuSelection + 1;
+          }
+          else if(currentHoriMenuSelection == 1) // entering day
+          {
+            if(currentVertMenuSelection < 0)
+            {
+              switch(manualMonth)
+              {
+                case 4: case 6: case 9: case 11: // April, June, September, November
+                  currentVertMenuSelection = 29;
+                  break;
+                case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Jan, Mar, May, Jul, Aug, Oct, Dec
+                  currentVertMenuSelection = 30;
+                  break;
+                case 2:
+                  if(manualYear % 4 == 0) // leap year
+                  {
+                    currentVertMenuSelection = 28;
+                  }
+                  else
+                  {
+                    currentVertMenuSelection = 27;
+                  }
+              }
             }
-        }
-    } else if (encLeftPosition < encLeftOldPosition - 2) { // Counterclockwise rotation
-        encLeftOldPosition = encLeftPosition;
-
-        if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
-            prevMenuMillis = curMillis;
-
-            currentHoriMenuSelection--;
-            if (currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
-        }
+            manualDay = currentVertMenuSelection + 1;
+          }
+          else if(currentHoriMenuSelection == 2) // entering year
+          {
+            if(currentVertMenuSelection > 2099)
+            {
+              currentVertMenuSelection = CUR_YEAR;
+            }
+            else if(currentVertMenuSelection < CUR_YEAR)
+            {
+              currentVertMenuSelection = CUR_YEAR;
+            }
+            manualYear = currentVertMenuSelection;
+          }
+          break;
+        case 3: // entering time
+          if(currentHoriMenuSelection == 0) // hour
+          {
+            if(currentVertMenuSelection < 0) currentVertMenuSelection = 23;
+            manualHour = currentVertMenuSelection;
+          }
+          else if(currentHoriMenuSelection == 1) // minute
+          {
+            if(currentVertMenuSelection < 0)
+            {
+              currentVertMenuSelection = 59;
+              manualHour--;
+              if(manualHour > 200) manualHour = 23;
+            }
+            manualMinute = currentVertMenuSelection;
+          }
+          break;
+        case 4:
+          if (currentVertMenuSelection < 0) currentVertMenuSelection = 0; // stay at top of menu
+          if(currentVertMenuSelection % 12 == 11)
+          {
+            scroll--;
+            if(scroll < 0) scroll = 0;
+          }
+      }
+      #ifdef DEBUG_PRINT
+      Serial.print("Current vert menu selection: ");
+      Serial.println(currentVertMenuSelection);
+      #endif
     }
+  }
+
+  if(encLeftPosition > encLeftOldPosition + 2)
+  {
+    #ifdef DEBUG_PRINT
+    Serial.println("Left knob turned cw");
+    Serial.println(encLeftPosition);
+    #endif
+    encLeftOldPosition = encLeftPosition;
+
+    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
+    {
+      prevMenuMillis = curMillis;
+      if(page == 2 || page == 3) // date or time entry
+      {
+        currentHoriMenuSelection++;
+        if(page == 2) // date entry
+        {
+          if(currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
+
+          if(currentHoriMenuSelection == 0) // month
+          {
+            currentVertMenuSelection = manualMonth - 1;
+          }
+          else if(currentHoriMenuSelection == 1) // day
+          {
+            currentVertMenuSelection = manualDay - 1;
+          }
+          else if(currentHoriMenuSelection == 2) // year
+          {
+            currentVertMenuSelection = manualYear;
+          }
+        }
+        else if(page == 3)
+        {
+          if(currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
+
+          if(currentHoriMenuSelection == 0) // hour
+          {
+            currentVertMenuSelection = manualHour;
+          }
+          else if(currentHoriMenuSelection == 1) // minute
+          {
+            currentVertMenuSelection = manualMinute;
+          }
+        }
+      }
+      #ifdef DEBUG_PRINT
+      Serial.print("Current hori menu selection: ");
+      Serial.println(currentHoriMenuSelection);
+      #endif
+    }
+  }
+  else if(encLeftPosition < encLeftOldPosition - 2)
+  {
+    #ifdef DEBUG_PRINT
+    Serial.println("Left knob turned ccw");
+    Serial.println(encLeftPosition);
+    #endif
+    encLeftOldPosition = encLeftPosition;
+
+    if(curMillis >= prevMenuMillis + MENU_UPDATE_TIME)
+    {
+      currentHoriMenuSelection--;
+      if(page == 2) // date entry
+      {
+        if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+
+        if(currentHoriMenuSelection == 0) // month
+        {
+          currentVertMenuSelection = manualMonth - 1;
+        }
+        else if(currentHoriMenuSelection == 1) // day
+        {
+          currentVertMenuSelection = manualDay - 1;
+        }
+        else if(currentHoriMenuSelection == 2) // year
+        {
+          currentVertMenuSelection = manualYear;
+        }
+      }
+      else if(page == 3) // time entry
+      {
+        if(currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+
+        if(currentHoriMenuSelection == 0) // hour
+        {
+          currentVertMenuSelection = manualHour;
+        }
+        else if(currentHoriMenuSelection == 1) // minute
+        {
+          currentVertMenuSelection = manualMinute;
+        }
+      }
+      #ifdef DEBUG_PRINT
+      Serial.print("Current hori menu selection: ");
+      Serial.println(currentHoriMenuSelection);
+      #endif
+    }
+  }
 }
+
+// void updateMenuSelection() {
+//     long encRightPosition = encRight.getPosition();
+//     long encLeftPosition = encLeft.getPosition();
+
+//     // Right Encoder Logic
+//     if (encRightPosition > encRightOldPosition + 2) { // Clockwise rotation
+//         encRightOldPosition = encRightPosition;
+
+//         if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+//             prevMenuMillis = curMillis;
+//             prevVertMenuSelection = currentVertMenuSelection;
+//             currentVertMenuSelection++;
+
+//             switch (page) {
+//                 case 0: case 1: // Initial menus
+//                     if (currentVertMenuSelection > 1) currentVertMenuSelection = 1;
+//                     break;
+//                 case 2: // Date entry
+//                       if (currentHoriMenuSelection == 0) { // Day
+//                         switch (manualMonth) { // Validate based on the current month
+//                           case 4: case 6: case 9: case 11: // Months with 30 days
+//                             if (currentVertMenuSelection > 29) currentVertMenuSelection = 0; // Reset if out of range
+//                               break;
+//                           case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Months with 31 days
+//                               if (currentVertMenuSelection > 30) currentVertMenuSelection = 0; // Reset if out of range
+//                               break;
+//                           case 2: // February
+//                               if (manualYear % 4 == 0) { // Leap year
+//                                   if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+//                               } else { // Non-leap year
+//                                   if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+//                               }
+//                               break;
+//                       }
+//                       manualDay = currentVertMenuSelection + 1; // Set the day (1-based index)
+//                   } else if (currentHoriMenuSelection == 1) { // Month
+//                       if (currentVertMenuSelection > 11) currentVertMenuSelection = 0; // Reset if out of range
+//                       manualMonth = currentVertMenuSelection + 1; // Set the month (1-based index)
+//                   } else if (currentHoriMenuSelection == 2) { // Year
+//                       if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR; // Upper limit
+//                       if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR; // Lower limit
+//                       manualYear = currentVertMenuSelection; // Set the year
+//                   }
+//                   break;
+
+//                     // if (currentHoriMenuSelection == 0) { // Month
+//                     //     if (currentVertMenuSelection > 11) currentVertMenuSelection = 0;
+//                     //     manualMonth = currentVertMenuSelection + 1;
+//                     // } else if (currentHoriMenuSelection == 1) { // Day
+//                     //     switch (manualMonth) {
+//                     //         case 4: case 6: case 9: case 11:
+//                     //             if (currentVertMenuSelection > 29) currentVertMenuSelection = 0;
+//                     //             break;
+//                     //         case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+//                     //             if (currentVertMenuSelection > 30) currentVertMenuSelection = 0;
+//                     //             break;
+//                     //         case 2:
+//                     //             if (manualYear % 4 == 0) {
+//                     //                 if (currentVertMenuSelection > 28) currentVertMenuSelection = 0;
+//                     //             } else {
+//                     //                 if (currentVertMenuSelection > 27) currentVertMenuSelection = 0;
+//                     //             }
+//                     //             break;
+//                     //     }
+//                     //     manualDay = currentVertMenuSelection + 1;
+//                     // } else if (currentHoriMenuSelection == 2) { // Year
+//                     //     if (currentVertMenuSelection > 2099) currentVertMenuSelection = CUR_YEAR;
+//                     //     if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
+//                     //     manualYear = currentVertMenuSelection;
+//                     // }
+//                     // break;
+//                 case 3: // Time entry
+//                     if (currentHoriMenuSelection == 0) { // Hour
+//                         if (currentVertMenuSelection > 23) currentVertMenuSelection = 0;
+//                         manualHour = currentVertMenuSelection;
+//                     } else if (currentHoriMenuSelection == 1) { // Minute
+//                         if (currentVertMenuSelection > 59) {
+//                             currentVertMenuSelection = 0;
+//                             manualHour = (manualHour + 1) % 24;
+//                         }
+//                         manualMinute = currentVertMenuSelection;
+//                     }
+//                     break;
+//                 case 4: // File selection
+//                     if (currentVertMenuSelection > fileCount - 1) currentVertMenuSelection = fileCount - 1;
+//                     if (currentVertMenuSelection % 12 == 0 && currentVertMenuSelection != 0 && currentVertMenuSelection != prevVertMenuSelection) {
+//                         scroll++;
+//                     }
+//                     break;
+//             }
+//         }
+//     } else if (encRightPosition < encRightOldPosition - 2) { // Counterclockwise rotation
+//         encRightOldPosition = encRightPosition;
+
+//         if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+//             prevMenuMillis = curMillis;
+//             prevVertMenuSelection = currentVertMenuSelection;
+//             currentVertMenuSelection--;
+
+//             switch (page) {
+//                 case 0: case 1:
+//                     if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
+//                     break;
+//                 case 2: // Date entry
+//                     if (currentHoriMenuSelection == 0) { // Day
+//                       if (currentVertMenuSelection < 0) {
+//                           switch (manualMonth) { // Validate and wrap around based on the current month
+//                               case 4: case 6: case 9: case 11: // Months with 30 days
+//                                   currentVertMenuSelection = 29; // Wrap to the last valid day
+//                                   break;
+//                               case 1: case 3: case 5: case 7: case 8: case 10: case 12: // Months with 31 days
+//                                   currentVertMenuSelection = 30; // Wrap to the last valid day
+//                                   break;
+//                               case 2: // February
+//                                   currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27; // Leap year or not
+//                                   break;
+//                           }
+//                       }
+//                       manualDay = currentVertMenuSelection + 1; // Set the day (1-based index)
+//                   } else if (currentHoriMenuSelection == 1) { // Month
+//                       if (currentVertMenuSelection < 0) currentVertMenuSelection = 11; // Wrap to December
+//                       manualMonth = currentVertMenuSelection + 1; // Set the month (1-based index)
+//                   } else if (currentHoriMenuSelection == 2) { // Year
+//                       if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR; // Ensure no year below the current year
+//                       manualYear = currentVertMenuSelection; // Set the year
+//                   }
+//                   break;
+                  
+//                     // if (currentHoriMenuSelection == 0) { // Month
+//                     //     if (currentVertMenuSelection < 0) currentVertMenuSelection = 11;
+//                     //     manualMonth = currentVertMenuSelection + 1;
+//                     // } else if (currentHoriMenuSelection == 1) { // Day
+//                     //     if (currentVertMenuSelection < 0) {
+//                     //         switch (manualMonth) {
+//                     //             case 4: case 6: case 9: case 11:
+//                     //                 currentVertMenuSelection = 29;
+//                     //                 break;
+//                     //             case 1: case 3: case 5: case 7: case 8: case 10: case 12:
+//                     //                 currentVertMenuSelection = 30;
+//                     //                 break;
+//                     //             case 2:
+//                     //                 currentVertMenuSelection = (manualYear % 4 == 0) ? 28 : 27;
+//                     //                 break;
+//                     //         }
+//                     //     }
+//                     //     manualDay = currentVertMenuSelection + 1;
+//                     // } else if (currentHoriMenuSelection == 2) { // Year
+//                     //     if (currentVertMenuSelection < CUR_YEAR) currentVertMenuSelection = CUR_YEAR;
+//                     //     manualYear = currentVertMenuSelection;
+//                     // }
+//                     // break;
+//                 case 3: // Time entry
+//                     if (currentHoriMenuSelection == 0) { // Hour
+//                         if (currentVertMenuSelection < 0) currentVertMenuSelection = 23;
+//                         manualHour = currentVertMenuSelection;
+//                     } else if (currentHoriMenuSelection == 1) { // Minute
+//                         if (currentVertMenuSelection < 0) {
+//                             currentVertMenuSelection = 59;
+//                             manualHour = (manualHour > 0) ? manualHour - 1 : 23;
+//                         }
+//                         manualMinute = currentVertMenuSelection;
+//                     }
+//                     break;
+//                 case 4:
+//                     if (currentVertMenuSelection < 0) currentVertMenuSelection = 0;
+//                     if (currentVertMenuSelection % 12 == 11) scroll--;
+//                     if (scroll < 0) scroll = 0;
+//                     break;
+//             }
+//         }
+//     }
+
+//     // Left Encoder Logic
+//     if (encLeftPosition > encLeftOldPosition + 2) { // Clockwise rotation
+//         encLeftOldPosition = encLeftPosition;
+
+//         if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+//             prevMenuMillis = curMillis;
+
+//             if (page == 2 || page == 3) { // Date or Time entry
+//                 currentHoriMenuSelection++;
+//                 if (page == 2 && currentHoriMenuSelection > 2) currentHoriMenuSelection = 2;
+//                 if (page == 3 && currentHoriMenuSelection > 1) currentHoriMenuSelection = 1;
+//             }
+//         }
+//     } else if (encLeftPosition < encLeftOldPosition - 2) { // Counterclockwise rotation
+//         encLeftOldPosition = encLeftPosition;
+
+//         if (curMillis >= prevMenuMillis + MENU_UPDATE_TIME) {
+//             prevMenuMillis = curMillis;
+
+//             currentHoriMenuSelection--;
+//             if (currentHoriMenuSelection < 0) currentHoriMenuSelection = 0;
+//         }
+//     }
+// }
 
 // function for displaying various pages/menus
 void displayPage(uint8_t page)
@@ -2278,90 +2264,90 @@ void displayPage(uint8_t page)
       }
       break;
     }
-    // case(2): // Date entry
-    // {
-    //   // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
-    //   // updateDisplay("Enter date", 0, false);
-    //   display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
-    //   updateDisplay("Enter date", 30, false);    // 0
+    case(2): // Date entry
+    {
+      // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
+      // updateDisplay("Enter date", 0, false);
+      display.drawLine(0, 42, display.width()-1, 42, LCD_FOREGROUND);
+      updateDisplay("Enter date", 30, false);    // 0
 
-    //   char displayMonth[3];
-    //   char displayDay[3];
-    //   char displayYear[5];
+      char displayMonth[3];
+      char displayDay[3];
+      char displayYear[5];
 
-    //   itoa(manualMonth, displayMonth, 10);
-    //   itoa(manualDay, displayDay, 10);
-    //   itoa(manualYear, displayYear, 10);
+      itoa(manualMonth, displayMonth, 10);
+      itoa(manualDay, displayDay, 10);
+      itoa(manualYear, displayYear, 10);
 
-    //   display.setTextSize(2);
-    //   display.setCursor(0, 56);
-    //   // display.setTextSize(1);
-    //   // display.setCursor(0, 10);
+      display.setTextSize(2);
+      display.setCursor(0, 56);
+      // display.setTextSize(1);
+      // display.setCursor(0, 10);
 
-    //   if(currentHoriMenuSelection == 0) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-    //   if(manualMonth < 10) display.print('0');
-    //   display.print(manualMonth);
+      if(currentHoriMenuSelection == 0) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+      if(manualMonth < 10) display.print('0');
+      display.print(manualMonth);
 
-    //   display.setTextColor(LCD_FOREGROUND);
-    //   display.print('/');
+      display.setTextColor(LCD_FOREGROUND);
+      display.print('/');
 
-    //   if(currentHoriMenuSelection == 1) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-    //   if(manualDay < 10) display.print('0');
-    //   display.print(manualDay);
+      if(currentHoriMenuSelection == 1) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+      if(manualDay < 10) display.print('0');
+      display.print(manualDay);
 
-    //   display.setTextColor(LCD_FOREGROUND);
-    //   display.print('/');
+      display.setTextColor(LCD_FOREGROUND);
+      display.print('/');
 
-    //   if(currentHoriMenuSelection == 2) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-    //   display.print(manualYear);
+      if(currentHoriMenuSelection == 2) display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+      display.print(manualYear);
 
-    //   display.setTextColor(LCD_FOREGROUND);
-    //   display.setTextSize(1);
-    //   break;
-    // }
+      display.setTextColor(LCD_FOREGROUND);
+      display.setTextSize(1);
+      break;
+    }
 
-    case (2): // Date entry
-{
-    display.drawLine(0, 42, display.width() - 1, 42, LCD_FOREGROUND);
-    updateDisplay("Enter date", 30, false);
+//     case (2): // Date entry
+// {
+//     display.drawLine(0, 42, display.width() - 1, 42, LCD_FOREGROUND);
+//     updateDisplay("Enter date", 30, false);
 
-    char displayDay[3];
-    char displayMonth[3];
-    char displayYear[5];
+//     char displayDay[3];
+//     char displayMonth[3];
+//     char displayYear[5];
 
-    itoa(manualDay, displayDay, 10);
-    itoa(manualMonth, displayMonth, 10);
-    itoa(manualYear, displayYear, 10);
+//     itoa(manualDay, displayDay, 10);
+//     itoa(manualMonth, displayMonth, 10);
+//     itoa(manualYear, displayYear, 10);
 
-    display.setTextSize(2);
-    display.setCursor(0, 56);
+//     display.setTextSize(2);
+//     display.setCursor(0, 56);
 
-    if (currentHoriMenuSelection == 0) 
-        display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-    if (manualDay < 10) 
-        display.print('0');
-    display.print(manualDay);
+//     if (currentHoriMenuSelection == 0) 
+//         display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+//     if (manualDay < 10) 
+//         display.print('0');
+//     display.print(manualDay);
 
-    display.setTextColor(LCD_FOREGROUND);
-    display.print('/');
+//     display.setTextColor(LCD_FOREGROUND);
+//     display.print('/');
 
-    if (currentHoriMenuSelection == 1) 
-        display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-    if (manualMonth < 10) 
-        display.print('0');
-    display.print(manualMonth);
+//     if (currentHoriMenuSelection == 1) 
+//         display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+//     if (manualMonth < 10) 
+//         display.print('0');
+//     display.print(manualMonth);
 
-    display.setTextColor(LCD_FOREGROUND);
-    display.print('/');
+//     display.setTextColor(LCD_FOREGROUND);
+//     display.print('/');
 
-    if (currentHoriMenuSelection == 2) 
-        display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
-    display.print(manualYear);
+//     if (currentHoriMenuSelection == 2) 
+//         display.setTextColor(LCD_BACKGROUND, LCD_FOREGROUND);
+//     display.print(manualYear);
 
-    display.setTextColor(LCD_FOREGROUND);
-    display.setTextSize(1);
-    break;
-}
+//     display.setTextColor(LCD_FOREGROUND);
+//     display.setTextSize(1);
+//     break;
+// }
     case(3): // Time entry
     {
       // display.drawLine(0, 10, display.width()-1, 10, LCD_FOREGROUND);
